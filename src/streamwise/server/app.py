@@ -56,6 +56,10 @@ class StreamServer:
         self.catalog = catalog
         self.txlog = txlog
         self._shapers = ShaperFactory(config.shaping)
+        # A write chunk must fit in the token bucket with room to spare: tokens that accrue
+        # while a task oversleeps are capped at the bucket size, so a chunk equal to the bucket
+        # would lose them and undershoot the configured rate.
+        self._chunk_size = max(1024, min(config.chunk_size, config.shaping.burst_bytes // 2))
         self._server: asyncio.Server | None = None
         self._connections: set[asyncio.Task[None]] = set()
 
@@ -75,10 +79,13 @@ class StreamServer:
         )
         log.info("listening on %s:%d", self.config.host, self.port)
 
-    async def close(self) -> None:
-        """Stop accepting connections, then cancel and await the active ones."""
+    async def close(self, grace: float = 0.0) -> None:
+        """Stop accepting connections, give active ones ``grace`` seconds to finish, then
+        cancel and await the rest."""
         if self._server is not None:
             self._server.close()
+        if grace > 0 and self._connections:
+            await asyncio.wait(list(self._connections), timeout=grace)
         for task in list(self._connections):
             task.cancel()
         if self._connections:
@@ -270,7 +277,7 @@ class StreamServer:
         )
         view = memoryview(header + msg.payload) if len(msg.payload) < 65536 else None
         written = 0
-        chunk = self.config.chunk_size
+        chunk = self._chunk_size
 
         async def write(buf: bytes | memoryview) -> None:
             nonlocal written

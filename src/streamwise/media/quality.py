@@ -70,7 +70,7 @@ class QualityTable:
                     "index": lv.index,
                     "label": lv.label,
                     "psnr": mse_to_psnr(sum(lv.segment_mse) / len(lv.segment_mse)),
-                    "segment_mse": [round(m, 6) for m in lv.segment_mse],
+                    "segment_mse": list(lv.segment_mse),
                     "segment_psnr": [round(p, 4) for p in lv.segment_psnr],
                 }
                 for lv in self.levels
@@ -114,7 +114,10 @@ def measure_level(
 ) -> LevelQuality:
     lv = manifest.levels[level]
     fps = Fraction(source["frame_rate"])
-    segments = [str(video_dir / manifest.segment_filename(level, s)) for s in range(len(manifest.segment_durations))]
+    segments = [
+        str(video_dir / manifest.segment_filename(level, s))
+        for s in range(len(manifest.segment_durations))
+    ]
     with tempfile.TemporaryDirectory() as tmp:
         stats = Path(tmp) / "psnr.log"
         graph = (

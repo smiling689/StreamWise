@@ -75,7 +75,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             for level in manifest.levels:
                 actual = sum(level.segment_sizes) * 8 / manifest.duration / 1000
-                print(f"  {level.label:>14}: {level.width}x{level.height}, {actual:.0f} kbps actual")
+                print(
+                    f"  {level.label:>14}: {level.width}x{level.height}, {actual:.0f} kbps actual"
+                )
             if not args.no_quality:
                 _report_quality(video_dir, args.jobs)
         else:

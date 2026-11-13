@@ -77,9 +77,12 @@ class StreamClient:
         ``stall_timeout`` bounds how long the client waits without receiving *any* byte; a slow
         but progressing download never times out.
         """
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), connect_timeout
-        )
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), connect_timeout
+            )
+        except TimeoutError as exc:
+            raise TimeoutError(f"connecting to {host}:{port} timed out") from exc
         client = cls(reader, writer, stall_timeout=stall_timeout)
         try:
             welcome = await client._request(

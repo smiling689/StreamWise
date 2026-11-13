@@ -81,7 +81,8 @@ def plan_segment_count(source: SourceInfo, opts: SegmentOptions, fps: Fraction) 
     frames = Fraction(opts.segment_duration).limit_denominator(1000) * fps
     if frames.denominator != 1:
         raise ValueError(
-            f"segment duration {opts.segment_duration}s is not a whole number of frames at {fps} fps"
+            f"segment duration {opts.segment_duration}s is not a whole number of frames "
+            f"at {fps} fps"
         )
     return count
 
