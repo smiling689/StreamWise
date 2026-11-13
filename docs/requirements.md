@@ -23,8 +23,8 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
 
 ## 1. Media Preparation (offline, server side)
 
-- [ ] **V-01** Prepare a source video (≥ 2 min, 1080p, varied content so quality differences are visible), e.g. `ocean`
-- [ ] **V-02** Define the bitrate ladder, e.g.:
+- [x] **V-01** Prepare a source video (≥ 2 min, 1080p, varied content so quality differences are visible), e.g. `ocean`
+- [x] **V-02** Define the bitrate ladder, e.g.:
 
   | Level | Resolution | Bitrate |
   | --- | --- | --- |
@@ -34,39 +34,39 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
   | 3 | 1080p | 5000k |
   | 4 | 1080p | 8000k |
 
-- [ ] **V-03** Transcode every level with FFmpeg and cut into **fixed 5 s** TS segments. Use a fixed GOP so segment boundaries align across levels, making bitrate switches seamless
-- [ ] **V-04** Segment naming: `{name}-{resolution}-{bitrate}-{seq}.ts`, e.g. `ocean-1080p-8000k-0.ts`
-- [ ] **V-05** Generate a JSON manifest: video name, segment duration, segment count, bitrate ladder, per-segment sizes. The client fetches it first
-- [ ] **V-06** One-command segmentation script, e.g. `scripts/segment.sh <input> <name>`
+- [x] **V-03** Transcode every level with FFmpeg and cut into **fixed 5 s** TS segments. Use a fixed GOP so segment boundaries align across levels, making bitrate switches seamless
+- [x] **V-04** Segment naming: `{name}-{resolution}-{bitrate}-{seq}.ts`, e.g. `ocean-1080p-8000k-0.ts`
+- [x] **V-05** Generate a JSON manifest: video name, segment duration, segment count, bitrate ladder, per-segment sizes. The client fetches it first
+- [x] **V-06** One-command segmentation: `streamwise-media segment <input> --name <name>`
 
 ## 2. Server (mandatory)
 
-- [ ] **S-01** Listen on a TCP port and accept client connections
-- [ ] **S-02** Serve multiple clients concurrently (≥ 3 simultaneous clients, no head-of-line blocking between them)
-- [ ] **S-03** Implement the application protocol (§4): fetch manifest, request segment by name, error responses (not found / malformed)
-- [ ] **S-04** Log every segment transmission to SQLite: client ID, segment name, sequence number, bitrate, byte count, send start/end time, throughput
-- [ ] **S-05** Log export (CSV) or query script for the test report
-- [ ] **S-06** Configurable application-level rate limiting (token bucket) that can replay a bandwidth trace — used for the bandwidth-drop demo and reproducible experiments
-- [ ] **S-07** Graceful shutdown; a client disconnecting mid-transfer must not affect other clients
+- [x] **S-01** Listen on a TCP port and accept client connections
+- [x] **S-02** Serve multiple clients concurrently (≥ 3 simultaneous clients, no head-of-line blocking between them)
+- [x] **S-03** Implement the application protocol (§4): fetch manifest, request segment by name, error responses (not found / malformed)
+- [x] **S-04** Log every segment transmission to SQLite: client ID, segment name, sequence number, bitrate, byte count, send start/end time, throughput
+- [x] **S-05** Log export (CSV) or query script for the test report
+- [x] **S-06** Configurable application-level rate limiting (token bucket) that can replay a bandwidth trace — used for the bandwidth-drop demo and reproducible experiments
+- [x] **S-07** Graceful shutdown; a client disconnecting mid-transfer must not affect other clients
 
 ## 3. Client (mandatory)
 
-- [ ] **C-01** Connect to the server and fetch the manifest
-- [ ] **C-02** Request segments in a loop, building the file name from `name-resolution-bitrate-seq`
-- [ ] **C-03** Store segments in the `download/` directory
-- [ ] **C-04** Feed received segments to the player for real-time playback (downloader and player decoupled by a buffer)
-- [ ] **C-05** Playback buffer model: buffer level, rebuffering detection and timing, startup delay
-- [ ] **C-06** **Rule-based ABR** — implement two for comparison:
+- [x] **C-01** Connect to the server and fetch the manifest
+- [x] **C-02** Request segments in a loop, building the file name from `name-resolution-bitrate-seq`
+- [x] **C-03** Store segments in the `download/` directory
+- [x] **C-04** Feed received segments to the player for real-time playback (downloader and player decoupled by a buffer)
+- [x] **C-05** Playback buffer model: buffer level, rebuffering detection and timing, startup delay
+- [x] **C-06** **Rule-based ABR** — implement two for comparison:
   - Throughput-based: harmonic mean of the last N segment throughputs × safety factor
   - Buffer-based (BBA): lowest level below the reservoir, highest above the cushion, linear mapping in between
-- [ ] **C-07** Common ABR interface `choose(state) -> level` so algorithms are interchangeable
-- [ ] **C-08** Cache management: delete each segment after it has been played; clear `download/` on exit
-- [ ] **C-09** Client-side log per segment: chosen level, download time, measured throughput, buffer level, rebuffer time (for QoE computation)
-- [ ] **C-10** Headless mode: no player window, simulated playback clock — for batch experiments
+- [x] **C-07** Common ABR interface `choose(state) -> level` so algorithms are interchangeable
+- [x] **C-08** Cache management: delete each segment after it has been played; clear `download/` on exit
+- [x] **C-09** Client-side log per segment: chosen level, download time, measured throughput, buffer level, rebuffer time (for QoE computation)
+- [x] **C-10** Headless mode: no player window, simulated playback clock — for batch experiments
 
 ## 4. Segment Protocol (needed for the design document)
 
-- [ ] **P-01** Define the message format, e.g. (big-endian):
+- [x] **P-01** Define the message format, e.g. (big-endian):
 
   ```
   +--------+---------+--------+--------+-------------+----------------+
@@ -78,32 +78,32 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
   ```
 
   Types: `GET_MANIFEST` / `MANIFEST` / `GET_SEGMENT` / `SEGMENT` / `ERROR` / `BYE`
-- [ ] **P-02** Optional integrity check for segment payloads (CRC32 / SHA-256)
-- [ ] **P-03** Message format diagram and interaction sequence diagram in the design document
+- [x] **P-02** Optional integrity check for segment payloads (CRC32 / SHA-256)
+- [x] **P-03** Message format diagram and interaction sequence diagram in the design document
 
 ## 5. Testing and Evaluation (mandatory)
 
-- [ ] **T-01** Network scenarios: fixed bandwidth (e.g. 1 / 2 / 4 / 8 Mbps), sudden drop (8 → 1 Mbps), fluctuating traces
-- [ ] **T-02** Metrics:
+- [x] **T-01** Network scenarios: fixed bandwidth (e.g. 1 / 2 / 4 / 8 Mbps), sudden drop (8 → 1 Mbps), fluctuating traces
+- [x] **T-02** Metrics:
   - Rebuffering ratio (rebuffer time / total playback time), rebuffer count, startup delay
   - Average bitrate, number and magnitude of switches
   - **PSNR**: compute each level's PSNR against the source with `ffmpeg -lavfi psnr`; weight by the levels actually played to get session PSNR
   - QoE (linear model): `QoE = Σ q(R_k) − μ·Σ rebuffer_k − Σ |q(R_{k+1}) − q(R_k)|`
-- [ ] **T-03** Compare the ABR algorithms across bandwidths and produce charts
-- [ ] **T-04** Wireshark capture showing the protocol exchange and TCP throughput behaviour
+- [~] **T-03** Compare the ABR algorithms across bandwidths and produce charts
+- [~] **T-04** Wireshark capture showing the protocol exchange and TCP throughput behaviour
 
 ## 6. Demo (week 16)
 
-- [ ] **D-01** At least **3 clients** streaming and playing simultaneously
-- [ ] **D-02** Simulated sudden bandwidth drop with visible bitrate switching (live terminal status: level, throughput, buffer; optionally a live chart)
+- [x] **D-01** At least **3 clients** streaming and playing simultaneously
+- [x] **D-02** Simulated sudden bandwidth drop with visible bitrate switching (live terminal status: level, throughput, buffer; optionally a live chart)
 - [ ] **D-03** Recorded demo video as a backup
 
 ## 7. Deliverables
 
-- [ ] **R-01** Complete source code (server, client, segmentation, ABR)
-- [ ] **R-02** Design document: system architecture diagram, segment protocol format, ABR flowchart
-- [ ] **R-03** Test report: rebuffering ratio and PSNR under different bandwidths
-- [ ] **R-04** User manual: environment setup and player debugging
+- [x] **R-01** Complete source code (server, client, segmentation, ABR)
+- [x] **R-02** Design document: system architecture diagram, segment protocol format, ABR flowchart
+- [~] **R-03** Test report: rebuffering ratio and PSNR under different bandwidths
+- [x] **R-04** User manual: environment setup and player debugging
 - [ ] **R-05** Academic-conference-style poster
 - [ ] **R-06** Demo materials: screenshots, videos
 
