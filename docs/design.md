@@ -9,7 +9,7 @@ internals, and the ABR algorithms of StreamWise. Requirement IDs (e.g. `S-02`) r
 ```mermaid
 flowchart LR
     subgraph prep["Offline media preparation (streamwise-media)"]
-        SRC[Source video] --> ENC["FFmpeg: 5-level ladder,<br/>aligned 5 s GOPs"]
+        SRC[Source video] --> ENC["FFmpeg: 6-level ladder,<br/>aligned 5 s GOPs"]
         ENC --> SEG[("media/&lt;video&gt;/<br/>*.ts + manifest.json<br/>+ quality.json")]
     end
 
@@ -53,14 +53,21 @@ uses 180 s starting at 0:30, which gives 36 segments of 5 s.
 
 | Level | Resolution | Nominal | Measured bandwidth¹ | Mean segment PSNR² |
 | --- | --- | --- | --- | --- |
-| 0 | 640x360 | 800 kbps | 992 kbps | 37.66 dB |
-| 1 | 854x480 | 1200 kbps | 1383 kbps | 39.74 dB |
-| 2 | 1280x720 | 2500 kbps | 2652 kbps | 43.40 dB |
-| 3 | 1920x1080 | 5000 kbps | 5036 kbps | 49.20 dB |
-| 4 | 1920x1080 | 8000 kbps | 7962 kbps | 51.53 dB |
+| 0 | 426x240 | 400 kbps | 600 kbps | 35.06 dB |
+| 1 | 640x360 | 800 kbps | 992 kbps | 37.66 dB |
+| 2 | 854x480 | 1200 kbps | 1383 kbps | 39.74 dB |
+| 3 | 1280x720 | 2500 kbps | 2654 kbps | 43.41 dB |
+| 4 | 1920x1080 | 5000 kbps | 5038 kbps | 49.19 dB |
+| 5 | 1920x1080 | 8000 kbps | 7969 kbps | 51.55 dB |
 
 ¹ All segment bytes (video, 128 kbps AAC audio, MPEG-TS overhead) divided by the duration.
 ² Against the source at 1920x1080 (see §7).
+
+The 240p rung was added after the first evaluation round. Without it, the lowest level
+needed 0.99 Mbit/s once audio and container overhead were counted. A 1 Mbit/s link (one of
+the required scenarios) then had no sustainable level, and every algorithm stalled
+repeatedly. The lowest rung must sit clearly below the slowest link the service should
+support.
 
 **Segment alignment.** Switching levels at a segment boundary only works if every level
 has its boundaries at the same frames and every segment starts with an IDR frame. The
@@ -271,7 +278,7 @@ download-time history. Algorithms are created from spec strings such as
 `throughput:window=5,safety=0.9`, so a learning-based ABR can be added later without
 touching the client. Rates are compared using each level's **measured bandwidth** from the
 manifest rather than its nominal encoder bitrate: the network has to carry audio and TS
-overhead too, which adds 24 % at level 0.
+overhead too, which adds 50 % at level 0 (600 vs. 400 kbps).
 
 ### 6.1 Throughput-based (rate-based)
 
@@ -291,9 +298,9 @@ to short throughput spikes. The safety factor leaves headroom for estimation err
 
 ```mermaid
 flowchart TB
-    A([next segment, buffer B, previous level p]) --> B{"B ≤ reservoir (5 s)?"}
+    A([next segment, buffer B, previous level p]) --> B{"B ≤ reservoir (10 s)?"}
     B -- yes --> L0["lowest level"]
-    B -- no --> C{"B ≥ reservoir + cushion (20 s)?"}
+    B -- no --> C{"B ≥ reservoir + cushion (24 s)?"}
     C -- yes --> LM["highest level"]
     C -- no --> F["f(B) = R_min + (R_max − R_min)(B − r)/cushion"]
     F --> G{"f(B) ≥ rate(p+1)?"}
@@ -306,6 +313,19 @@ flowchart TB
 BBA does not use throughput estimates at all: the buffer level itself carries the
 information. The hysteresis band (switch only when `f(B)` crosses a neighbouring rate)
 prevents oscillation.
+
+**Parameters.** With 5 s segments and a 30 s buffer cap, the defaults are a 10 s reservoir
+and a 14 s cushion:
+
+- The reservoir covers two segments, so the client keeps the lowest level until the buffer
+  can absorb one slow download.
+- `reservoir + cushion = 24 s` stays below the download gate (a new segment is requested
+  only when the buffer is at most 30 − 5 = 25 s), so the top level remains reachable.
+
+The first evaluation used a 5 s reservoir (one segment). With it, BBA switched up while a
+single download could still drain the buffer, and stalled 22 times on a 1 Mbit/s link. The
+test report quantifies the choice with a sensitivity experiment
+(`experiments/bba_sensitivity.toml`).
 
 ### 6.3 Fixed
 

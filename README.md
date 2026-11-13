@@ -4,7 +4,7 @@ Course project for CS3953 Computer Networks — **Topic 8: Streaming Video Trans
 
 StreamWise streams segmented video over a custom TCP protocol and plays it in real time. Each client adapts its bitrate with a rule-based algorithm, and the evaluation tooling measures rebuffering, PSNR, and QoE under emulated network conditions.
 
-- **Media pipeline** — FFmpeg turns a video into a 5-level bitrate ladder (360p–1080p) of 5 s MPEG-TS segments. Every segment is checked to be aligned across levels, so segments of different levels can be concatenated.
+- **Media pipeline** — FFmpeg turns a video into a 6-level bitrate ladder (240p–1080p) of 5 s MPEG-TS segments. Every segment is checked to be aligned across levels, so segments of different levels can be concatenated.
 - **Server** — asyncio TCP server handling many clients at once. A token-bucket bandwidth shaper replays traces, per client or on one shared link, and every transmission is logged to SQLite.
 - **Client** — downloader, real-time playback model (buffer, startup, stalls), ffplay player, per-session download cache, and an SQLite session log.
 - **ABR** — throughput-based (harmonic mean), buffer-based (BBA-0), and fixed baselines behind a pluggable interface.

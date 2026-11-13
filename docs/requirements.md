@@ -28,11 +28,12 @@ The current scope is the **mandatory part only**. Extensions are deferred (see Â
 
   | Level | Resolution | Bitrate |
   | --- | --- | --- |
-  | 0 | 360p | 800k |
-  | 1 | 480p | 1200k |
-  | 2 | 720p | 2500k |
-  | 3 | 1080p | 5000k |
-  | 4 | 1080p | 8000k |
+  | 0 | 240p | 400k |
+  | 1 | 360p | 800k |
+  | 2 | 480p | 1200k |
+  | 3 | 720p | 2500k |
+  | 4 | 1080p | 5000k |
+  | 5 | 1080p | 8000k |
 
 - [x] **V-03** Transcode every level with FFmpeg and cut into **fixed 5 s** TS segments. Use a fixed GOP so segment boundaries align across levels, making bitrate switches seamless
 - [x] **V-04** Segment naming: `{name}-{resolution}-{bitrate}-{seq}.ts`, e.g. `ocean-1080p-8000k-0.ts`

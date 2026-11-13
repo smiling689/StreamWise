@@ -37,7 +37,7 @@ unzip media/raw/bbb.zip -d media/raw && rm media/raw/bbb.zip
 streamwise-media segment media/raw/bbb_sunflower_1080p_30fps_normal.mp4 --name bbb --start 30 --duration 180
 ```
 
-This creates `media/bbb/` with 36 × 5 segments, `manifest.json`, and `quality.json`
+This creates `media/bbb/` with 36 × 6 segments, `manifest.json`, and `quality.json`
 (per-segment PSNR). Any video works. Useful options:
 
 | Option | Default | Meaning |
@@ -45,7 +45,7 @@ This creates `media/bbb/` with 36 × 5 segments, `manifest.json`, and `quality.j
 | `--name` | (required) | Video name used in file names (letters, digits, `_`) |
 | `--segment-duration` | 5 | Seconds per segment; must be a whole number of frames |
 | `--start`, `--duration` | 0, all | Portion of the source to use |
-| `--ladder` | `360:800,480:1200,720:2500,1080:5000,1080:8000` | `HEIGHT:KBPS` levels |
+| `--ladder` | `240:400,360:800,480:1200,720:2500,1080:5000,1080:8000` | `HEIGHT:KBPS` levels |
 | `--preset` | `fast` | x264 preset |
 | `--no-quality` | off | Skip the PSNR measurement (run `streamwise-media quality media/<name>` later) |
 
@@ -121,7 +121,7 @@ scripts/demo.sh traces/drop_recover.txt 9001
 
 The script starts a server with `--shaping-scope global` and three client windows side by
 side: client 1 uses throughput-based ABR (with sound), client 2 buffer-based ABR, and client 3
-the non-adaptive baseline `fixed:2` (always 720p); clients 2 and 3 are muted. During the drop
+the non-adaptive baseline `fixed:3` (always 720p); clients 2 and 3 are muted. During the drop
 the adaptive clients switch down while the fixed client stalls. Logs go to `logs/demo-<time>/`. Press
 Ctrl-C to stop everything.
 
