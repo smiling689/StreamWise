@@ -103,6 +103,12 @@ class BandwidthTrace:
                 samples.append((float(fields[0]), float(fields[1])))
         return cls.from_samples(samples)
 
+    def to_text(self, header: str = "") -> str:
+        """Serialize in the trace file format (exact float round trip)."""
+        lines = [f"# {line}" for line in header.splitlines()]
+        lines += [f"{t!r} {r / MBPS!r}" for t, r in zip(self.times, self.rates_bps, strict=True)]
+        return "\n".join(lines) + "\n"
+
     @property
     def mean_bps(self) -> float:
         """Time-weighted mean rate up to the last change (the last rate if constant)."""

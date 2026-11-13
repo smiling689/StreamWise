@@ -122,6 +122,22 @@ class QModel:
             encoder, np.zeros(shape), np.zeros(shape, dtype=np.int64), level_bandwidths_bps, {}
         )
 
+    @classmethod
+    def ensemble(cls, models: list[QModel]) -> QModel:
+        """Visit-weighted average of several models trained with different seeds.
+
+        Each state-action value is the mean of the members' values weighted by how often each
+        member updated it, which reduces the variance of individual training runs.
+        """
+        first = models[0]
+        if any(m.encoder != first.encoder for m in models):
+            raise ValueError("ensemble members must share the state encoding")
+        visits = sum(m.visits for m in models)
+        weighted = sum(m.q * m.visits for m in models)
+        q = np.divide(weighted, visits, out=np.zeros_like(first.q), where=visits > 0)
+        meta = {"ensemble_of": [m.metadata.get("train", {}).get("seed") for m in models]}
+        return cls(first.encoder, q, visits, first.level_bandwidths_bps, meta)
+
     def greedy(self, s: int) -> int | None:
         """Best visited action in state ``s``, or ``None`` if the state was never visited."""
         visited = self.visits[s] > 0

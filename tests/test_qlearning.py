@@ -106,3 +106,34 @@ def test_trace_splits_are_disjoint_and_deterministic(tmp_path: Path) -> None:
     test_set = ts.measured_split(tmp_path, "test")
     assert [t.name for t in test_set] == ["test/x"]
     assert test_set[0].trace.times[-1] >= ts.MIN_TRACE_S - 2
+
+
+def test_ensemble_is_visit_weighted() -> None:
+    enc = StateEncoder(levels=3)
+    a, b = QModel.empty(enc, BW), QModel.empty(enc, BW)
+    a.q[5] = [1.0, 0.0, 0.0]
+    a.visits[5] = [3, 0, 0]
+    b.q[5] = [5.0, 3.0, 0.0]
+    b.visits[5] = [1, 4, 0]
+    e = QModel.ensemble([a, b])
+    assert e.q[5][0] == pytest.approx((1 * 3 + 5 * 1) / 4)
+    assert e.q[5][1] == pytest.approx(3.0)
+    assert list(e.visits[5]) == [4, 4, 0]
+    assert e.greedy(5) == 1
+
+
+def test_evaluation_report(tmp_path: Path) -> None:
+    from streamwise.sim.evaluate import evaluate_sets, write_report
+
+    sets = {"tiny": ts.synthetic_set("test", 4)}
+    specs = ["throughput", "buffer"]
+    results = evaluate_sets(MANIFEST, sets, specs, media_dir=tmp_path)
+    path = write_report(results, specs, tmp_path / "out", reference="buffer")
+    text = path.read_text()
+    assert "Paired comparison of `buffer`" in text
+    assert "| `throughput` |" in text
+    assert (tmp_path / "out" / "qoe-cdf.png").exists()
+    rows = (tmp_path / "out" / "sessions.csv").read_text().splitlines()
+    assert len(rows) == 1 + 4 * len(specs)
+    with pytest.raises(ValueError):
+        write_report(results, specs, tmp_path / "out2", reference="nope")

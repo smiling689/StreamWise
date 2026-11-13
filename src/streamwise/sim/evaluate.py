@@ -65,8 +65,19 @@ def _mean_ci(values: Sequence[float]) -> tuple[float, float]:
 
 
 def write_report(
-    results: dict[str, dict[str, list[Run]]], abr_specs: Sequence[str], out_dir: Path
+    results: dict[str, dict[str, list[Run]]],
+    abr_specs: Sequence[str],
+    out_dir: Path,
+    reference: str | None = None,
 ) -> Path:
+    """Write ``summary.md``, ``sessions.csv`` and ``qoe-cdf.png``.
+
+    ``reference`` (default: the first ABR) is compared pairwise against every other ABR.
+    Series colors follow the order of ``abr_specs``.
+    """
+    reference = reference or abr_specs[0]
+    if reference not in abr_specs:
+        raise ValueError(f"reference {reference!r} is not among the evaluated ABRs")
     import matplotlib
 
     matplotlib.use("Agg")
@@ -155,13 +166,14 @@ def write_report(
         ax.set_ylim(0, 1.02)
 
         # Paired comparison of the first ABR against each other one (same traces).
-        first = abr_specs[0]
         lines.append("")
-        lines.append(f"Paired comparison of `{first}` against each baseline on the same traces:\n")
+        lines.append(
+            f"Paired comparison of `{reference}` against each baseline on the same traces:\n"
+        )
         lines.append("| Baseline | Mean QoE/seg gain (95% CI) | Wins | Ties | Losses |")
         lines.append("|---|---|---|---|---|")
-        a = np.array([r.metrics.qoe_per_segment for r in by_abr[first]])
-        for spec in abr_specs[1:]:
+        a = np.array([r.metrics.qoe_per_segment for r in by_abr[reference]])
+        for spec in (x for x in abr_specs if x != reference):
             b = np.array([r.metrics.qoe_per_segment for r in by_abr[spec]])
             diff = a - b
             mean, ci = _mean_ci(diff)
@@ -180,3 +192,37 @@ def write_report(
     path = out_dir / "summary.md"
     path.write_text("\n".join(lines) + "\n")
     return path
+
+
+def plot_training_curves(model_paths: Sequence[Path], out_path: Path) -> None:
+    """Validation QoE over training episodes, one line per model (from model metadata)."""
+    import json
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from streamwise.experiments.report import SERIES_COLORS, _style
+
+    _style()
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for i, path in enumerate(model_paths):
+        meta = json.loads(Path(path).read_text())["metadata"]
+        history = meta["history"]
+        xs = [h["episode"] / 1000 for h in history]
+        ys = [h["validation_qoe"] for h in history]
+        seed = meta.get("train", {}).get("seed", i)
+        color = SERIES_COLORS[i % len(SERIES_COLORS)]
+        ax.plot(xs, ys, color=color, linewidth=2, marker="o", markersize=3, label=f"seed {seed}")
+        best = max(range(len(ys)), key=ys.__getitem__)
+        ax.scatter([xs[best]], [ys[best]], s=60, color=color, edgecolor="#fcfcfb", zorder=3)
+    ax.set_title(
+        "Q-learning: validation score during training (dot = selected snapshot)", loc="left"
+    )
+    ax.set_xlabel("training episodes (thousands)")
+    ax.set_ylabel("mean of per-domain QoE/seg")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)

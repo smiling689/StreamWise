@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -18,9 +18,9 @@ from streamwise.sim.tracesets import NamedTrace
 
 @dataclass(frozen=True, slots=True)
 class TrainConfig:
-    episodes: int = 150_000
-    gamma: float = 0.95
-    alpha_min: float = 0.02
+    episodes: int = 400_000
+    gamma: float = 0.90
+    alpha_min: float = 0.005
     """Learning rate is ``max(alpha_min, (1 + visits) ** -alpha_power)`` per state-action."""
     alpha_power: float = 0.6
     epsilon_start: float = 1.0
@@ -29,7 +29,7 @@ class TrainConfig:
     """Exploration decays linearly over this fraction of the episodes, then stays at the end."""
     random_offset: bool = True
     """Start each episode at a random point of its trace."""
-    eval_every: int = 10_000
+    eval_every: int = 20_000
     seed: int = 1
 
 
@@ -43,19 +43,37 @@ def evaluate(
     return [simulate(manifest, t.trace, make_abr(), config).metrics.qoe_per_segment for t in traces]
 
 
+TraceSets = Mapping[str, Sequence[NamedTrace]] | Sequence[NamedTrace]
+
+
+def _as_sets(traces: TraceSets) -> dict[str, list[NamedTrace]]:
+    sets = {"all": list(traces)} if not isinstance(traces, Mapping) else dict(traces)
+    sets = {name: list(ts) for name, ts in sets.items() if ts}
+    if not sets:
+        raise ValueError("no traces")
+    return sets
+
+
 def train(
     manifest: Manifest,
-    train_traces: Sequence[NamedTrace],
-    validation_traces: Sequence[NamedTrace],
+    train_traces: TraceSets,
+    validation_traces: TraceSets,
     config: TrainConfig,
     sim_config: SimConfig | None = None,
     log: Callable[[str], None] = print,
 ) -> QModel:
     """Train with epsilon-greedy Q-learning; return the best model on the validation set.
 
-    Every ``eval_every`` episodes the greedy policy is evaluated on the validation traces
-    (never on test traces), and the best snapshot is kept (early stopping).
+    ``train_traces`` and ``validation_traces`` may be plain lists or dictionaries of named
+    domains (e.g. synthetic and measured traces). Each episode first picks a domain uniformly,
+    then a trace, so a small domain is not drowned out by a large one. Every ``eval_every``
+    episodes the greedy policy is evaluated on the validation traces (never on test traces);
+    the score is the mean of the per-domain mean QoE, and the best snapshot is kept (early
+    stopping).
     """
+    train_sets = _as_sets(train_traces)
+    validation_sets = _as_sets(validation_traces)
+    domains = list(train_sets.values())
     rng = random.Random(config.seed)
     levels = len(manifest.levels)
     encoder = StateEncoder(levels=levels)
@@ -71,7 +89,8 @@ def train(
     for episode in range(1, config.episodes + 1):
         frac = min(1.0, episode / decay_episodes)
         epsilon = config.epsilon_start + frac * (config.epsilon_end - config.epsilon_start)
-        named = train_traces[rng.randrange(len(train_traces))]
+        domain = domains[rng.randrange(len(domains))]
+        named = domain[rng.randrange(len(domain))]
         trace = named.trace
         if config.random_offset and trace.end_time > 0:
             trace = trace.shifted(rng.uniform(0, trace.end_time / 2))
@@ -100,10 +119,16 @@ def train(
 
         if episode % config.eval_every == 0 or episode == config.episodes:
             snapshot = QModel(encoder, q.copy(), visits.copy(), bandwidths, {})
-            scores = evaluate(
-                manifest, validation_traces, lambda m=snapshot: QLearningAbr(m), sim_config
+            score = float(
+                np.mean(
+                    [
+                        np.mean(
+                            evaluate(manifest, vs, lambda m=snapshot: QLearningAbr(m), sim_config)
+                        )
+                        for vs in validation_sets.values()
+                    ]
+                )
             )
-            score = float(np.mean(scores))
             history.append(
                 {
                     "episode": episode,
@@ -124,8 +149,8 @@ def train(
     assert best is not None
     best.metadata = {
         "train": asdict(config),
-        "train_traces": len(train_traces),
-        "validation_traces": len(validation_traces),
+        "train_traces": {name: len(ts) for name, ts in train_sets.items()},
+        "validation_traces": {name: len(ts) for name, ts in validation_sets.items()},
         "best_validation_qoe": round(best_score, 4),
         "history": history,
         "video": manifest.video,

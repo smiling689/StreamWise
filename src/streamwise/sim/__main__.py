@@ -11,6 +11,7 @@ import tomllib
 from pathlib import Path
 
 from streamwise.common.manifest import Manifest
+from streamwise.experiments.runner import scenario_trace_path
 from streamwise.server.shaping import BandwidthTrace
 from streamwise.sim import tracesets as ts
 from streamwise.sim.env import simulate
@@ -36,8 +37,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
         }
     rows = []
     for scenario in cfg["scenario"]:
-        if "trace" in scenario:
-            trace = BandwidthTrace.load(Path(scenario["trace"]))
+        trace_path = scenario_trace_path(scenario, Path.cwd(), args.experiment)
+        if trace_path is not None:
+            trace = BandwidthTrace.load(trace_path)
         else:
             trace = BandwidthTrace.constant(float(scenario["rate_mbps"]))
         for spec in cfg["abrs"]:
@@ -84,13 +86,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_sets(args: argparse.Namespace, split: str, synthetic: int) -> list[ts.NamedTrace]:
-    traces = ts.synthetic_set(split, synthetic) if synthetic else []
+def _load_sets(
+    args: argparse.Namespace, split: str, synthetic: int
+) -> dict[str, list[ts.NamedTrace]]:
+    sets: dict[str, list[ts.NamedTrace]] = {}
+    if synthetic:
+        sets["synthetic"] = ts.synthetic_set(split, synthetic)
     if args.hsdpa_dir is not None:
-        traces += ts.measured_split(args.hsdpa_dir, split)
-    if not traces:
+        sets["hsdpa"] = ts.measured_split(args.hsdpa_dir, split)
+    if not sets:
         raise ValueError(f"empty {split} set")
-    return traces
+    return sets
 
 
 def cmd_train(args: argparse.Namespace) -> int:
@@ -99,7 +105,11 @@ def cmd_train(args: argparse.Namespace) -> int:
     manifest = _manifest(args.manifest)
     train_set = _load_sets(args, "train", args.synthetic_train)
     validation_set = _load_sets(args, "validation", args.synthetic_validation)
-    print(f"training on {len(train_set)} traces, validating on {len(validation_set)}")
+
+    def describe(sets: dict[str, list[ts.NamedTrace]]) -> str:
+        return ", ".join(f"{len(v)} {k}" for k, v in sets.items())
+
+    print(f"training on {describe(train_set)}; validating on {describe(validation_set)}")
     config = TrainConfig(
         episodes=args.episodes,
         gamma=args.gamma,
@@ -124,8 +134,16 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     if args.synthetic_test:
         sets["synthetic_test"] = ts.synthetic_set("test", args.synthetic_test)
     results = evaluate_sets(manifest, sets, args.abr)
-    path = write_report(results, args.abr, args.out)
+    path = write_report(results, args.abr, args.out, args.reference)
     print(path.read_text())
+    return 0
+
+
+def cmd_curves(args: argparse.Namespace) -> int:
+    from streamwise.sim.evaluate import plot_training_curves
+
+    plot_training_curves(args.models, args.out)
+    print(f"wrote {args.out}")
     return 0
 
 
@@ -143,16 +161,21 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--synthetic-train", type=int, default=1000)
     tr.add_argument("--synthetic-validation", type=int, default=100)
     tr.add_argument("--episodes", type=int, default=400_000)
-    tr.add_argument("--gamma", type=float, default=0.95)
+    tr.add_argument("--gamma", type=float, default=0.90)
     tr.add_argument("--alpha-min", type=float, default=0.005)
     tr.add_argument("--eval-every", type=int, default=20_000)
     tr.add_argument("--seed", type=int, default=1)
 
     ev = sub.add_parser("evaluate", help="evaluate ABRs on the held-out test traces")
     ev.add_argument("--abr", action="append", required=True, help="ABR spec (repeatable)")
+    ev.add_argument("--reference", help="ABR compared pairwise with the others (default: first)")
     ev.add_argument("--hsdpa-dir", type=Path, default=Path("traces/hsdpa"))
     ev.add_argument("--synthetic-test", type=int, default=200)
     ev.add_argument("--out", type=Path, default=Path("results/sim-eval"))
+
+    cu = sub.add_parser("curves", help="plot validation curves stored in trained models")
+    cu.add_argument("models", type=Path, nargs="+")
+    cu.add_argument("--out", type=Path, default=Path("results/training-curves.png"))
     return parser
 
 
@@ -165,7 +188,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         args.hsdpa_dir = None
-    handlers = {"validate": cmd_validate, "train": cmd_train, "evaluate": cmd_evaluate}
+    handlers = {
+        "validate": cmd_validate,
+        "train": cmd_train,
+        "evaluate": cmd_evaluate,
+        "curves": cmd_curves,
+    }
     try:
         return handlers[args.command](args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:

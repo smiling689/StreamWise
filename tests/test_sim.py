@@ -92,3 +92,33 @@ def test_trace_repeat_and_shift() -> None:
     assert shifted.rate_at(0) == 2 * MBPS
     assert shifted.bytes_between(0, 3) == pytest.approx(looped.bytes_between(4.5, 7.5))
     assert BandwidthTrace.parse("0 2\n10 4").mean_bps == pytest.approx(2 * MBPS)
+
+
+def test_trace_text_roundtrip() -> None:
+    trace = BandwidthTrace.from_samples([(0.0, 1.234567891), (0.3333333, 0.0), (1.1, 7.5)])
+    assert BandwidthTrace.parse(trace.to_text("header\nline 2")) == trace
+
+
+def test_measured_trace_scenario(tmp_path) -> None:
+    from pathlib import Path
+
+    from streamwise.experiments.runner import (
+        Scenario,
+        prepare_measured_trace,
+        scenario_trace_path,
+    )
+
+    (tmp_path / "raw").write_text("5.0 1.5\n5.5 2.5\n5.5 9\n6.0 0.5\n")
+    scenario = Scenario("m", measured_trace="raw")
+    out = tmp_path / "exp"
+    prepare_measured_trace(scenario, tmp_path, out)
+    path = scenario_trace_path({"name": "m", "measured_trace": "raw"}, tmp_path, out)
+    assert path == (out / "traces" / "m.txt").resolve()
+    trace = BandwidthTrace.load(path)
+    assert trace.times[:3] == (0.0, 0.5, 1.0)
+    assert trace.times[-1] >= 590
+    assert scenario.server_args(tmp_path, out) == ["--trace", str(path)]
+    assert scenario_trace_path({"name": "c", "rate_mbps": 2}, tmp_path, out) is None
+    with pytest.raises(ValueError, match="exactly one"):
+        Scenario("bad", rate_mbps=1.0, measured_trace="raw")
+    assert Path(path).read_text().startswith("# Normalized and looped from raw")

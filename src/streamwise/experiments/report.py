@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
+from streamwise.experiments.runner import scenario_trace_path  # noqa: E402
 from streamwise.media.quality import QUALITY_FILE, QualityTable  # noqa: E402
 from streamwise.server.shaping import BandwidthTrace  # noqa: E402
 
@@ -143,7 +144,10 @@ def plot_metrics(summary: pd.DataFrame, scenarios: list[str], abrs: list[str], p
         ("qoe_per_segment", "QoE per segment"),
     ]
     colors = _colors(abrs)
-    fig, axes = plt.subplots(2, 2, figsize=(11, 6.6))
+    many = len(scenarios) > 6
+    fig, axes = plt.subplots(
+        2, 2, figsize=(max(11.0, 1.3 * len(scenarios) + 3), 7.2 if many else 6.6)
+    )
     width = 0.8 / len(abrs)
     for ax, (metric, label) in zip(axes.flat, chosen, strict=True):
         for i, abr in enumerate(abrs):
@@ -174,7 +178,10 @@ def plot_metrics(summary: pd.DataFrame, scenarios: list[str], abrs: list[str], p
                     label=abr,
                 )
         ax.set_title(label, loc="left")
-        ax.set_xticks(range(len(scenarios)), scenarios)
+        if many:
+            ax.set_xticks(range(len(scenarios)), scenarios, rotation=30, ha="right")
+        else:
+            ax.set_xticks(range(len(scenarios)), scenarios)
         ax.grid(axis="x", visible=False)
         values = summary[metric].dropna()
         if metric == "psnr_db":
@@ -305,8 +312,9 @@ def build_report(out_dir: Path, media_dir: Path = Path("media")) -> Path:
     figures.mkdir(exist_ok=True)
     plot_metrics(summary, scenarios, abrs, figures / "metrics.png")
     for scenario in config["scenario"]:
-        if "trace" in scenario:
-            trace = BandwidthTrace.load(Path(scenario["trace"]))
+        trace_path = scenario_trace_path(scenario, Path.cwd(), out_dir)
+        if trace_path is not None:
+            trace = BandwidthTrace.load(trace_path)
         else:
             trace = BandwidthTrace.constant(float(scenario["rate_mbps"]))
         plot_timeline(
