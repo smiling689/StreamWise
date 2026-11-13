@@ -66,10 +66,12 @@ streamwise-server --trace traces/demo_shared.txt --shaping-scope global   # one 
 | `--media-dir` | `media` | Directory with segmented videos |
 | `--log-db` | `logs/server.db` | SQLite transmission log |
 | `--rate-mbps` / `--trace` | none | Constant limit or bandwidth trace file |
-| `--shaping-scope` | `connection` | `connection`: independent limit per client, trace starts at connect; `global`: one limit shared by all clients, trace starts at server start |
+| `--shaping-scope` | `connection` | `connection`: independent limit per connection, trace starts at connect; `client`: one limit per client name, shared by its connections; `global`: one limit shared by all clients, trace starts at server start |
 | `--burst-kb` | 32 | Token-bucket size |
 | `--encryption` | `optional` | `off`, `optional` (encrypt when the client asks) or `required` (reject plaintext clients) |
 | `--psk-file` | none | Pre-shared key file; clients must use the same key |
+| `--delay-ms` | 0 | Emulated round-trip time added to every request |
+| `--reset-after-s` | off | Fault injection: abort every connection this many seconds after it opens |
 
 A trace file holds `<time_s> <mbps>` lines; `#` starts a comment, and each rate holds until
 the next line. `streamwise-experiment gen-trace FILE --seed N` generates a fluctuating trace.
@@ -109,6 +111,8 @@ streamwise-client --name probe --player none --segments 6   # headless, first 6 
 | `--log-db` / `--no-log` | `logs/client.db` | SQLite session log |
 | `--encrypt` | off | Require an AES-256-GCM encrypted connection |
 | `--psk-file` | none | Pre-shared key file; authenticates the server (implies `--encrypt`) |
+| `--transport` | `segment` | `segment`: one request per segment; `window`: sliding window of chunk requests that survives connection failures |
+| `--window`, `--chunk-kb`, `--connections` | 16, 64, 1 | Sliding-window parameters |
 
 The client prints one line per segment (level, measured throughput, download time, buffer
 level, stalls), marks `UP`/`DOWN` switches, and ends with a summary. Each segment is stored
@@ -129,6 +133,24 @@ fails with `key confirmation failed`, and a plaintext client gets `server error 
 `encryption` column of the server's `sessions` table records what each connection used.
 `streamwise-experiment crypto-bench` measures the encryption cost, and
 `streamwise-experiment run experiments/encryption.toml` repeats the main evaluation encrypted.
+
+### Sliding-Window Streaming (extension E-03)
+
+```bash
+streamwise-server --rate-mbps 4 --shaping-scope client --reset-after-s 15
+streamwise-client --name client1 --transport window --connections 2
+streamwise-client --name client2                     # segment transport: fails at the first reset
+```
+
+The window client logs every connection failure and reconnect, keeps playing, and prints a
+summary such as `window: 2 connection failures, 2 reconnects, 11 chunks re-requested
+(0.68 MB), peak reassembly 1 chunks`.
+`streamwise-experiment window-bench` runs the full evaluation; see
+[sliding-window.md](sliding-window.md). The long video it uses is prepared once with:
+
+```bash
+streamwise-media segment media/raw/bbb_sunflower_1080p_30fps_normal.mp4 --name bbblong --start 0 --duration 600 --no-quality
+```
 
 ## 5. Live Demo
 

@@ -113,7 +113,8 @@ Segment files are named `{video}-{height}p-{kbps}k-{seq}.ts`, for example
 
 StreamWise uses its own binary request/response protocol over one TCP connection per
 client. TCP provides ordering and reliability. An application-level CRC-32 additionally
-verifies every payload end to end.
+verifies every payload end to end. A client may pipeline requests (send several before
+the first response); the server answers them strictly in request order.
 
 ### 3.1 Message Format
 
@@ -153,10 +154,17 @@ All integers are unsigned and big-endian. The header is 16 bytes.
 | `SEGMENT` | 6 | S → C | Raw MPEG-TS bytes |
 | `ERROR` | 7 | S → C | JSON `{"code", "message"}` |
 | `BYE` | 8 | C → S | empty |
+| `GET_CHUNK` | 9 | C → S | `!QI` byte offset and length, then the UTF-8 segment file name |
+| `CHUNK` | 10 | S → C | The requested bytes of the segment (at most 1 MiB) |
 
 Error codes: `400` bad request (malformed message; the server then closes the connection),
 `403` an encrypted request failed authentication, `404` unknown video or segment, `409`
-unexpected message type, `426` the server requires encryption, `500` internal error.
+unexpected message type, `416` invalid chunk range, `426` the server requires encryption,
+`500` internal error.
+
+**Sliding-window transport (extension E-03).** `GET_CHUNK`/`CHUNK` let a client fetch a
+segment as fixed-size chunks with a sliding window over several connections; see
+[sliding-window.md](sliding-window.md).
 
 **Encryption (extension E-02).** If the client offers a key exchange in `HELLO` and the
 server accepts it in `WELCOME`, every later message in both directions is encrypted with
@@ -221,6 +229,13 @@ sequenceDiagram
   - `--shaping-scope global`: one bucket shared by all clients, with the trace clock
     starting at server start. This models a shared bottleneck link and is used in the live
     demo. A FIFO lock divides the bandwidth fairly among clients.
+  - `--shaping-scope client`: one bucket per client name, shared by all connections of that
+    client, with the trace clock starting at its first connection. This models a client's
+    access link for the multi-connection sliding-window transport.
+- **Pipelining.** A reader task queues up to 256 requests per connection while the
+  connection task answers them in order. `--delay-ms` answers each request no earlier than
+  that long after it arrived (an emulated round-trip time). `--reset-after-s` aborts every
+  connection that long after it opened (fault injection).
 - **Transmission log (S-04).** Every segment response is recorded in SQLite
   (`transmissions`): session, request ID, segment, sequence number, level, resolution,
   bitrate, bytes, start and end time (Unix time), duration, throughput, and status (`ok`,
