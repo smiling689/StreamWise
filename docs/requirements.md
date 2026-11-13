@@ -90,7 +90,7 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
   - Average bitrate, number and magnitude of switches
   - **PSNR**: compute each level's PSNR against the source with `ffmpeg -lavfi psnr`; weight by the levels actually played to get session PSNR
   - QoE (linear model): `QoE = Σ q(R_k) − μ·Σ rebuffer_k − Σ |q(R_{k+1}) − q(R_k)|`
-- [~] **T-03** Compare the ABR algorithms across bandwidths and produce charts
+- [x] **T-03** Compare the ABR algorithms across bandwidths and produce charts
 - [~] **T-04** Wireshark capture showing the protocol exchange and TCP throughput behaviour
 
 ## 6. Demo (week 16)
@@ -103,7 +103,7 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
 
 - [x] **R-01** Complete source code (server, client, segmentation, ABR)
 - [x] **R-02** Design document: system architecture diagram, segment protocol format, ABR flowchart
-- [~] **R-03** Test report: rebuffering ratio and PSNR under different bandwidths
+- [x] **R-03** Test report: rebuffering ratio and PSNR under different bandwidths
 - [x] **R-04** User manual: environment setup and player debugging
 - [ ] **R-05** Academic-conference-style poster
 - [ ] **R-06** Demo materials: screenshots, videos
