@@ -1,0 +1,17 @@
+name: streamwise
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - ffmpeg          # segmentation, PSNR measurement, ffplay player
+  - sqlite          # sqlite3 CLI for inspecting transmission logs
+  - numpy
+  - pandas
+  - matplotlib
+  - pytest
+  - pytest-asyncio
+  - ruff
+  - pip
+  - pip:
+      - -e .
