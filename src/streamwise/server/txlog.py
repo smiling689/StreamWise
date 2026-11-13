@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     peer            TEXT NOT NULL,
     connected_at    REAL NOT NULL,   -- Unix time (s)
     disconnected_at REAL,
-    close_reason    TEXT
+    close_reason    TEXT,
+    encryption      TEXT             -- none | AES-256-GCM | AES-256-GCM+PSK
 );
 CREATE TABLE IF NOT EXISTS transmissions (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS transmissions (
     level          INTEGER,
     resolution     TEXT,
     bitrate_kbps   INTEGER,
-    bytes          INTEGER NOT NULL, -- payload bytes actually written
+    bytes          INTEGER NOT NULL, -- payload bytes written (incl. the GCM tag)
     start_time     REAL NOT NULL,    -- Unix time (s) the response started
     end_time       REAL NOT NULL,    -- Unix time (s) the last byte was handed to TCP
     duration_s     REAL NOT NULL,
@@ -61,7 +62,7 @@ class Transmission:
 
 class TransmissionLog:
     def __init__(self, path: Path) -> None:
-        self._db = SqliteWriter(path, SCHEMA)
+        self._db = SqliteWriter(path, SCHEMA, {"sessions": [("encryption", "TEXT")]})
 
     @property
     def path(self) -> Path:
@@ -73,9 +74,10 @@ class TransmissionLog:
             (session_id, peer, connected_at),
         )
 
-    def session_named(self, session_id: str, client_name: str) -> None:
+    def session_named(self, session_id: str, client_name: str, encryption: str = "none") -> None:
         self._db.execute(
-            "UPDATE sessions SET client_name = ? WHERE session_id = ?", (client_name, session_id)
+            "UPDATE sessions SET client_name = ?, encryption = ? WHERE session_id = ?",
+            (client_name, encryption, session_id),
         )
 
     def session_closed(self, session_id: str, disconnected_at: float, reason: str) -> None:

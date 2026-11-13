@@ -62,6 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--window-size", type=_pair, default=(640, 360), help="player window WxH (default: 640x360)"
     )
     parser.add_argument("--window-pos", type=_pair, help="player window position X,Y")
+    parser.add_argument(
+        "--encrypt", action="store_true", help="require an AES-256-GCM encrypted connection"
+    )
+    parser.add_argument(
+        "--psk-file",
+        type=Path,
+        help="pre-shared key file that authenticates the server (implies --encrypt)",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="only log warnings and errors")
     return parser
 
@@ -88,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
         max_segments=args.segments,
         download_dir=args.download_dir,
         log_db=None if args.no_log else args.log_db,
+        encrypt=args.encrypt or args.psk_file is not None,
+        psk_file=args.psk_file,
     )
     player: Player
     if args.player == "ffplay":

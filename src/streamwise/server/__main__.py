@@ -9,6 +9,7 @@ import signal
 import sys
 from pathlib import Path
 
+from streamwise.common.crypto import load_psk
 from streamwise.server.app import ServerConfig, run_server
 from streamwise.server.catalog import CatalogError
 from streamwise.server.shaping import BandwidthTrace, ShapingConfig
@@ -37,6 +38,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--burst-kb", type=int, default=32, help="token bucket size in KiB (default: %(default)s)"
     )
+    parser.add_argument(
+        "--encryption",
+        choices=["off", "optional", "required"],
+        default="optional",
+        help="AES-256-GCM: 'optional' encrypts when the client asks, 'required' rejects "
+        "plaintext clients (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--psk-file",
+        type=Path,
+        help="pre-shared key file mixed into the key derivation (authenticates clients)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     return parser
 
@@ -59,11 +72,18 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: cannot load trace: {exc}", file=sys.stderr)
             return 2
-    config = ServerConfig(
-        host=args.host,
-        port=args.port,
-        shaping=ShapingConfig(trace, args.shaping_scope, args.burst_kb * 1024),
-    )
+    try:
+        psk = load_psk(args.psk_file) if args.psk_file else None
+        config = ServerConfig(
+            host=args.host,
+            port=args.port,
+            shaping=ShapingConfig(trace, args.shaping_scope, args.burst_kb * 1024),
+            encryption=args.encryption,
+            psk=psk,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     async def amain() -> None:
         stop = asyncio.Event()

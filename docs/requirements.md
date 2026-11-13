@@ -113,7 +113,7 @@ The mandatory part plus three extensions worth 50 points in total (E-01, E-02, E
 | ID | Extension | Points | Status |
 | --- | --- | --- | --- |
 | E-01 | Intelligent ABR (Q-Learning) | 25 | done — [docs/intelligent-abr.md](intelligent-abr.md) |
-| E-02 | End-to-end AES encryption | 10 | in scope |
+| E-02 | End-to-end AES encryption | 10 | done — [docs/encryption.md](encryption.md) |
 | E-03 | Sliding-window streaming | 15 | in scope |
 | E-04 | Dynamic path optimization | 25 | not planned |
 | E-05 | Student-defined open problem | 10–25 | not planned (proposal deadline passed) |
@@ -125,6 +125,14 @@ The mandatory part plus three extensions worth 50 points in total (E-01, E-02, E
 - [x] **E-01c** Training on synthetic and real 3G traces, with model selection on a validation split only
 - [x] **E-01d** Trained model runs unchanged in the real client (`--abr qlearning`)
 - [x] **E-01e** QoE comparison with the rule-based algorithms on held-out traces (simulator) and in the real system
+
+**E-02 End-to-end AES encryption**
+
+- [x] **E-02a** Key exchange inside the handshake (X25519 + HKDF-SHA256), fresh keys per connection, optional pre-shared key for authentication
+- [x] **E-02b** Every message after the handshake encrypted with AES-256-GCM; header authenticated; replay and reordering detected
+- [x] **E-02c** Server modes off / optional / required; clear errors for missing encryption and wrong keys
+- [x] **E-02d** Tests for tampering, replay, wrong keys and plaintext leakage; Wireshark shows encrypted messages
+- [x] **E-02e** Overhead measured (CPU, bytes, unshaped throughput) and QoE compared with plaintext streaming
 
 ## Milestones
 

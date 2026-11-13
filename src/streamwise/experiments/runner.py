@@ -77,6 +77,8 @@ class ExperimentConfig:
     segments: int | None = None
     base_port: int = 9200
     media_dir: str = "media"
+    encryption: bool = False
+    """Run every session over an AES-256-GCM encrypted connection."""
     extra: dict[str, object] = field(default_factory=dict)
 
     @classmethod
@@ -96,6 +98,7 @@ class ExperimentConfig:
             segments=data.pop("segments", None),
             base_port=int(data.pop("base_port", 9200)),
             media_dir=str(data.pop("media_dir", "media")),
+            encryption=bool(data.pop("encryption", False)),
             extra=data,
         )
 
@@ -167,6 +170,8 @@ async def run_experiment(config: ExperimentConfig, config_path: Path, out_dir: P
                     str(out_dir / f"server-{scenario.name}.db"),
                     "--shaping-scope",
                     "connection",
+                    "--encryption",
+                    "required" if config.encryption else "optional",
                     *scenario.server_args(base_dir, out_dir),
                     stdout=log_file,
                     stderr=asyncio.subprocess.STDOUT,
@@ -187,6 +192,8 @@ async def run_experiment(config: ExperimentConfig, config_path: Path, out_dir: P
             ]  # fmt: skip
             if config.segments:
                 args += ["--segments", str(config.segments)]
+            if config.encryption:
+                args.append("--encrypt")
             started = time.monotonic()
             with (logs / f"client-{name}.log").open("wb") as log_file:
                 proc = await asyncio.create_subprocess_exec(
