@@ -6,7 +6,7 @@
 
 ## Scope
 
-The current scope is the **mandatory part only**. Extensions are deferred (see §8), but the design should keep the ABR interface pluggable so an ML-based ABR can be added later without restructuring.
+The mandatory part plus three extensions worth 50 points in total (E-01, E-02, E-03; see §8). The bonus is capped at 25 points, so the extra extensions are insurance against partial credit.
 
 ## 0. Technical Choices
 
@@ -108,17 +108,23 @@ The current scope is the **mandatory part only**. Extensions are deferred (see �
 - [ ] **R-05** Academic-conference-style poster
 - [ ] **R-06** Demo materials: screenshots, videos
 
-## 8. Extensions (deferred)
+## 8. Extensions
 
-Not in the current scope; to be decided later. Bonus is capped at 25 points.
+| ID | Extension | Points | Status |
+| --- | --- | --- | --- |
+| E-01 | Intelligent ABR (Q-Learning) | 25 | done — [docs/intelligent-abr.md](intelligent-abr.md) |
+| E-02 | End-to-end AES encryption | 10 | in scope |
+| E-03 | Sliding-window streaming | 15 | in scope |
+| E-04 | Dynamic path optimization | 25 | not planned |
+| E-05 | Student-defined open problem | 10–25 | not planned (proposal deadline passed) |
 
-| ID | Extension | Points |
-| --- | --- | --- |
-| E-01 | Intelligent ABR (Q-Learning / DQN) | 25 |
-| E-02 | End-to-end AES encryption | 10 |
-| E-03 | Sliding-window streaming | 15 |
-| E-04 | Dynamic path optimization | 25 |
-| E-05 | Student-defined open problem | 10–25 |
+**E-01 Intelligent ABR**
+
+- [x] **E-01a** Trace-driven simulator mirroring the real client and server, validated against real sessions
+- [x] **E-01b** Tabular Q-learning agent behind the common ABR interface (state: previous level, buffer, throughput estimate, trend; reward: per-segment QoE)
+- [x] **E-01c** Training on synthetic and real 3G traces, with model selection on a validation split only
+- [x] **E-01d** Trained model runs unchanged in the real client (`--abr qlearning`)
+- [x] **E-01e** QoE comparison with the rule-based algorithms on held-out traces (simulator) and in the real system
 
 ## Milestones
 
@@ -127,3 +133,4 @@ Not in the current scope; to be decided later. Bonus is capped at 25 points.
 3. **M3 ABR, logging, shaping** (S-04–07, C-05–07, C-09–10)
 4. **M4 Experiments and evaluation** (T-*)
 5. **M5 Documentation, poster, demo rehearsal** (D-*, R-*)
+6. **M6 Extensions** — E-01 Q-learning ABR, E-02 AES encryption, E-03 sliding-window streaming

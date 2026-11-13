@@ -332,6 +332,13 @@ test report quantifies the choice with a sensitivity experiment
 `fixed:<level|min|max>` always requests one level. It serves as the non-adaptive baseline
 in experiments.
 
+### 6.4 Q-learning (extension E-01)
+
+`qlearning` is a tabular Q-learning agent trained offline in a trace-driven simulator that
+reproduces the client and server behaviour above. It uses the same interface, so the real
+client runs it unchanged. The simulator, the agent, training, and evaluation are described in
+[intelligent-abr.md](intelligent-abr.md).
+
 ## 7. Metrics and QoE
 
 Metrics are defined in `streamwise.analysis.metrics`:
@@ -366,6 +373,5 @@ which one it uses.
   the same code.
 - One request is in flight per connection; HTTP/2-style pipelining is not needed for
   sequential segment fetching.
-- The ABR interface and the trace-driven experiment runner are designed so that a
-  learning-based ABR (extension E-01) can be trained and compared with these baselines
-  directly.
+- The learning-based ABR (extension E-01) is trained in a simulator of this system; see
+  [intelligent-abr.md](intelligent-abr.md).

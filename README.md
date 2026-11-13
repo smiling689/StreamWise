@@ -8,6 +8,7 @@ StreamWise streams segmented video over a custom TCP protocol and plays it in re
 - **Server** — asyncio TCP server handling many clients at once. A token-bucket bandwidth shaper replays traces, per client or on one shared link, and every transmission is logged to SQLite.
 - **Client** — downloader, real-time playback model (buffer, startup, stalls), ffplay player, per-session download cache, and an SQLite session log.
 - **ABR** — throughput-based (harmonic mean), buffer-based (BBA-0), and fixed baselines behind a pluggable interface.
+- **Q-learning ABR** (extension) — trained offline in a simulator that is validated against the real system; evaluated on held-out real 3G traces, where it halves the share of sessions that stall.
 - **Evaluation** — parallel scenario runner, bandwidth traces, QoE/PSNR report with charts, a Wireshark dissector, and a three-client live demo.
 
 ## Quick Start
@@ -32,6 +33,7 @@ streamwise-experiment run experiments/default.toml   # full evaluation and repor
 - [Design document](docs/design.md): architecture, segment protocol, server and client internals, ABR algorithms, and metrics
 - [User manual](docs/user-manual.md): setup, usage, demo, experiments, Wireshark, and troubleshooting
 - [Test report](docs/test-report.md): rebuffering and PSNR under different bandwidths
+- [Intelligent ABR](docs/intelligent-abr.md): Q-learning ABR, simulator, training and evaluation (extension E-01)
 - [Requirement checklist](docs/requirements.md) ([中文](docs/requirements.zh.md))
 - [Assignment](docs/assignment.md) ([中文](docs/assignment.zh.md))
 
@@ -45,8 +47,10 @@ src/streamwise/
   client/       session, playback model, player, cache, session log (streamwise-client)
   abr/          ABR interface and rule-based algorithms
   analysis/     session metrics and QoE
+  sim/          trace-driven simulator, Q-learning training and evaluation (streamwise-sim)
   experiments/  scenario runner, traces, report (streamwise-experiment)
 experiments/    experiment configurations
+models/         trained Q-learning model
 traces/         bandwidth traces
 scripts/        live demo and packet capture
 tools/wireshark Wireshark dissector
