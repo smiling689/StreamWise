@@ -9,3 +9,4 @@ StreamWise implements TCP-based segmented video transmission with real-time play
 ## Documents
 
 - Project requirements: [demand.md](demand.md) (English) / [demand_zh.md](demand_zh.md) (Chinese)
+- Requirement checklist (zh): [docs/requirements.md](docs/requirements.md)
