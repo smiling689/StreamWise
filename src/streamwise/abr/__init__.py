@@ -1,7 +1,8 @@
 """Adaptive bitrate algorithms behind a common interface.
 
 Algorithms are created from a spec string ``name[:key=value,...]``, e.g. ``throughput``,
-``buffer:reservoir_s=5,cushion_s=20`` or ``fixed:level=max``.
+``buffer:reservoir_s=5,cushion_s=20``, ``fixed:level=max`` or
+``qlearning:model=models/qlearning-bbb.json``.
 """
 
 from __future__ import annotations
@@ -9,12 +10,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from streamwise.abr.base import AbrAlgorithm, AbrState
+from streamwise.abr.qlearning import QLearningAbr
 from streamwise.abr.rules import BufferAbr, FixedAbr, ThroughputAbr
 
 REGISTRY: dict[str, Callable[..., AbrAlgorithm]] = {
     "throughput": ThroughputAbr,
     "buffer": BufferAbr,
     "fixed": FixedAbr,
+    "qlearning": QLearningAbr,
 }
 
 
@@ -47,4 +50,12 @@ def create_abr(spec: str) -> AbrAlgorithm:
         raise ValueError(f"bad parameters for ABR {name!r}: {exc}") from exc
 
 
-__all__ = ["AbrAlgorithm", "AbrState", "BufferAbr", "FixedAbr", "ThroughputAbr", "create_abr"]
+__all__ = [
+    "AbrAlgorithm",
+    "AbrState",
+    "BufferAbr",
+    "FixedAbr",
+    "QLearningAbr",
+    "ThroughputAbr",
+    "create_abr",
+]
