@@ -13,6 +13,7 @@ local HEADER_LEN = 16
 local msg_types = {
     [1] = "HELLO", [2] = "WELCOME", [3] = "GET_MANIFEST", [4] = "MANIFEST",
     [5] = "GET_SEGMENT", [6] = "SEGMENT", [7] = "ERROR", [8] = "BYE",
+    [9] = "GET_CHUNK", [10] = "CHUNK",
 }
 local text_types = { [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [7] = true }
 
@@ -25,10 +26,13 @@ local f_len     = ProtoField.uint32("streamwise.payload_length", "Payload Length
 local f_crc     = ProtoField.uint32("streamwise.crc32", "Payload CRC-32", base.HEX)
 local f_text    = ProtoField.string("streamwise.text", "Payload")
 local f_data    = ProtoField.bytes("streamwise.data", "Segment Data")
+local f_offset  = ProtoField.uint64("streamwise.chunk_offset", "Chunk Offset")
+local f_clen    = ProtoField.uint32("streamwise.chunk_length", "Chunk Length")
 local f_cipher  = ProtoField.bytes("streamwise.ciphertext", "AES-256-GCM Ciphertext")
 local f_tag     = ProtoField.bytes("streamwise.gcm_tag", "GCM Authentication Tag")
 streamwise.fields = {
-    f_magic, f_version, f_type, f_enc, f_reqid, f_len, f_crc, f_text, f_data, f_cipher, f_tag,
+    f_magic, f_version, f_type, f_enc, f_reqid, f_len, f_crc, f_text, f_data,
+    f_offset, f_clen, f_cipher, f_tag,
 }
 
 local TAG_LEN = 16
@@ -69,6 +73,13 @@ local function dissect_pdu(tvb, pinfo, tree)
             end
             subtree:add(f_tag, tvb(HEADER_LEN + plen - TAG_LEN, TAG_LEN))
             summary = summary .. string.format(" (%d bytes)", plen)
+        elseif mtype == 9 and plen > 12 then
+            subtree:add(f_offset, tvb(HEADER_LEN, 8))
+            subtree:add(f_clen, tvb(HEADER_LEN + 8, 4))
+            subtree:add(f_text, tvb(HEADER_LEN + 12, plen - 12))
+            summary = summary .. string.format(" %s [%s+%d]",
+                tvb(HEADER_LEN + 12, plen - 12):string(),
+                tostring(tvb(HEADER_LEN, 8):uint64()), tvb(HEADER_LEN + 8, 4):uint())
         elseif text_types[mtype] then
             subtree:add(f_text, payload)
             if mtype == 3 or mtype == 5 then
