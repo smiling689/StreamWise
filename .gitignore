@@ -30,6 +30,9 @@ venv/
 *.pcap
 *.pcapng
 
+# Secrets: pre-shared keys for encrypted streaming
+*.psk
+
 # Experiment outputs (regenerate from scripts)
 /results/
 

@@ -20,13 +20,25 @@ _STOP = object()
 
 
 class SqliteWriter:
-    def __init__(self, path: Path, schema: str) -> None:
+    def __init__(
+        self,
+        path: Path,
+        schema: str,
+        added_columns: dict[str, list[tuple[str, str]]] | None = None,
+    ) -> None:
+        """``added_columns`` maps a table to ``(column, type)`` pairs that were added to the
+        schema later; they are added to databases created by an older version."""
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         # Create the schema synchronously so errors surface at construction time.
         with sqlite3.connect(path, timeout=30) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(schema)
+            for table, columns in (added_columns or {}).items():
+                existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                for column, decl in columns:
+                    if column not in existing:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
         self._queue: queue.Queue[Any] = queue.Queue()
         self._thread = threading.Thread(target=self._run, name=f"sqlite:{path.name}", daemon=True)
         self._closed = False

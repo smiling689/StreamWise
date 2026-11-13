@@ -15,6 +15,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from streamwise.common import crypto
 from streamwise.common import protocol as proto
 from streamwise.common.protocol import ErrorCode, Message, MessageType, ProtocolError
 from streamwise.server.catalog import MediaCatalog
@@ -24,6 +25,9 @@ from streamwise.server.txlog import Transmission, TransmissionLog
 log = logging.getLogger(__name__)
 
 SERVER_NAME = "StreamWise/0.1"
+ENCRYPTION_MODES = ("off", "optional", "required")
+OFFLOAD_BYTES = 256 * 1024
+"""Encrypt payloads at least this large in a worker thread, off the event loop."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +40,17 @@ class ServerConfig:
     handshake_timeout: float = 10.0
     idle_timeout: float = 120.0
     """Close a connection that sends no request for this long."""
+    encryption: str = "optional"
+    """'off': ignore encryption offers; 'optional': encrypt when the client offers it;
+    'required': reject clients that do not."""
+    psk: bytes | None = field(default=None, repr=False)
+    """Pre-shared key mixed into the key derivation; authenticates both peers."""
+
+    def __post_init__(self) -> None:
+        if self.encryption not in ENCRYPTION_MODES:
+            raise ValueError(f"encryption must be one of {ENCRYPTION_MODES}")
+        if self.psk is not None and self.encryption == "off":
+            raise ValueError("a pre-shared key needs encryption 'optional' or 'required'")
 
 
 @dataclass(slots=True)
@@ -44,6 +59,7 @@ class Session:
     peer: str
     shaper: Shaper
     client_name: str | None = None
+    channel: crypto.SecureChannel | None = None
 
     @property
     def label(self) -> str:
@@ -105,12 +121,25 @@ class StreamServer:
         reason = "closed"
         try:
             reason = await self._serve(session, reader, writer)
+        except crypto.DecryptionError as exc:
+            reason = "decryption_failed"
+            log.warning("%s decryption failed: %s", session.label, exc)
+            with contextlib.suppress(OSError):
+                await self._send(
+                    session,
+                    writer,
+                    proto.error_message(0, ErrorCode.DECRYPTION_FAILED, str(exc)),
+                    encrypt=False,
+                )
         except ProtocolError as exc:
             reason = f"protocol_error: {exc}"
             log.warning("%s protocol error: %s", session.label, exc)
             with contextlib.suppress(OSError):
                 await self._send(
-                    session, writer, proto.error_message(0, ErrorCode.BAD_REQUEST, str(exc))
+                    session,
+                    writer,
+                    proto.error_message(0, ErrorCode.BAD_REQUEST, str(exc)),
+                    encrypt=False,
                 )
         except TimeoutError:
             reason = "timeout"
@@ -136,33 +165,53 @@ class StreamServer:
         self, session: Session, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> str:
         hello = await asyncio.wait_for(
-            proto.read_message(reader, proto.MAX_REQUEST_PAYLOAD), self.config.handshake_timeout
+            self._read_request(session, reader), self.config.handshake_timeout
         )
         if hello is None:
             return "closed_before_hello"
         if hello.type is not MessageType.HELLO:
             raise ProtocolError(f"expected HELLO, got {hello.type.name}")
-        name = hello.json().get("client")
+        info = hello.json()
+        name = info.get("client")
         session.client_name = str(name)[:64] if name else f"anon-{session.session_id[:4]}"
-        self.txlog.session_named(session.session_id, session.client_name)
+        welcome = {
+            "session_id": session.session_id,
+            "server": SERVER_NAME,
+            "videos": self.catalog.video_names,
+        }
+        offer = info.get("encryption")
+        channel = None
+        if offer is not None and self.config.encryption != "off":
+            try:
+                welcome, channel = crypto.server_accept(
+                    hello.payload, offer, welcome, self.config.psk
+                )
+            except crypto.HandshakeError as exc:
+                raise ProtocolError(f"encryption handshake: {exc}") from exc
+        encryption = "none"
+        if channel is not None:
+            encryption = crypto.CIPHER + ("+PSK" if self.config.psk else "")
+        self.txlog.session_named(session.session_id, session.client_name, encryption)
+        if channel is None and self.config.encryption == "required":
+            await self._send(
+                session,
+                writer,
+                proto.error_message(
+                    hello.request_id,
+                    ErrorCode.ENCRYPTION_REQUIRED,
+                    "this server only accepts encrypted connections",
+                ),
+            )
+            return "encryption_required"
         await self._send(
-            session,
-            writer,
-            proto.json_message(
-                MessageType.WELCOME,
-                hello.request_id,
-                {
-                    "session_id": session.session_id,
-                    "server": SERVER_NAME,
-                    "videos": self.catalog.video_names,
-                },
-            ),
+            session, writer, proto.json_message(MessageType.WELCOME, hello.request_id, welcome)
         )
-        log.info("%s hello from %s", session.label, session.peer)
+        session.channel = channel  # everything after WELCOME is encrypted
+        log.info("%s hello from %s (encryption: %s)", session.label, session.peer, encryption)
 
         while True:
             msg = await asyncio.wait_for(
-                proto.read_message(reader, proto.MAX_REQUEST_PAYLOAD), self.config.idle_timeout
+                self._read_request(session, reader), self.config.idle_timeout
             )
             if msg is None:
                 return "client_closed"
@@ -270,12 +319,49 @@ class StreamServer:
                     len(data) * 8 / duration / 1e6 if duration > 0 else float("inf"),
                 )
 
-    async def _send(self, session: Session, writer: asyncio.StreamWriter, msg: Message) -> int:
-        """Write a message through the connection's shaper. Returns bytes written."""
+    async def _read_request(self, session: Session, reader: asyncio.StreamReader) -> Message | None:
+        """Read one request and, on an encrypted connection, authenticate and decrypt it."""
+        header = await proto.read_header(reader, proto.MAX_REQUEST_PAYLOAD)
+        if header is None:
+            return None
+        payload = await proto.read_payload(reader, header)
+        if session.channel is None:
+            if header.encrypted:
+                raise ProtocolError("encrypted message without a key exchange")
+        else:
+            if not header.encrypted:
+                raise ProtocolError(f"plaintext {header.type.name} on an encrypted connection")
+            payload = session.channel.open(header.type, header.request_id, payload)
+        return Message(header.type, header.request_id, payload)
+
+    async def _send(
+        self,
+        session: Session,
+        writer: asyncio.StreamWriter,
+        msg: Message,
+        *,
+        encrypt: bool = True,
+    ) -> int:
+        """Write a message through the connection's shaper. Returns bytes written.
+
+        On an encrypted connection the payload is sealed first; ``encrypt=False`` sends a
+        plaintext message (used for fatal errors the client may not be able to decrypt).
+        """
+        payload = msg.payload
+        channel = session.channel if encrypt else None
+        if channel is not None:
+            if len(payload) >= OFFLOAD_BYTES:
+                payload = await asyncio.to_thread(channel.seal, msg.type, msg.request_id, payload)
+            else:
+                payload = channel.seal(msg.type, msg.request_id, payload)
         header = proto.encode_header(
-            msg.type, msg.request_id, len(msg.payload), proto.crc32(msg.payload)
+            msg.type,
+            msg.request_id,
+            len(payload),
+            proto.crc32(payload),
+            encrypted=channel is not None,
         )
-        view = memoryview(header + msg.payload) if len(msg.payload) < 65536 else None
+        view = memoryview(header + payload) if len(payload) < 65536 else None
         written = 0
         chunk = self._chunk_size
 
@@ -291,9 +377,9 @@ class StreamServer:
                 await write(view[off : off + chunk])
         else:
             await write(header)
-            payload = memoryview(msg.payload)
-            for off in range(0, len(payload), chunk):
-                await write(payload[off : off + chunk])
+            body = memoryview(payload)
+            for off in range(0, len(body), chunk):
+                await write(body[off : off + chunk])
         return written
 
 

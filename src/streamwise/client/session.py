@@ -28,6 +28,7 @@ from streamwise.client.clientlog import ClientLog, SegmentRecord
 from streamwise.client.connection import ServerError, StreamClient
 from streamwise.client.playback import PlaybackModel, Stall
 from streamwise.client.player import NullPlayer, Player
+from streamwise.common.crypto import load_psk
 from streamwise.common.manifest import Manifest
 from streamwise.common.protocol import ProtocolError
 
@@ -52,6 +53,10 @@ class ClientConfig:
     connect_timeout: float = 10.0
     stall_timeout: float = 30.0
     player_close_timeout: float = 15.0
+    encrypt: bool = False
+    """Require an AES-256-GCM encrypted connection."""
+    psk_file: Path | None = None
+    """Pre-shared key file; authenticates the server (implies ``encrypt``)."""
 
     def validate(self, manifest: Manifest) -> None:
         longest = max(manifest.segment_durations)
@@ -111,12 +116,15 @@ class StreamingSession:
         model: PlaybackModel | None = None
         try:
             try:
+                psk = load_psk(cfg.psk_file) if cfg.psk_file else None
                 client = await StreamClient.connect(
                     cfg.host,
                     cfg.port,
                     cfg.name,
                     connect_timeout=cfg.connect_timeout,
                     stall_timeout=cfg.stall_timeout,
+                    encrypt=cfg.encrypt or psk is not None,
+                    psk=psk,
                 )
                 if clog:
                     clog.server_session(self.session_id, client.session_id)
@@ -128,12 +136,13 @@ class StreamingSession:
                     count = max(1, min(count, cfg.max_segments))
                 durations = manifest.segment_durations[:count]
                 log.info(
-                    "[%s] %s: %d segments, %d levels, ABR %s",
+                    "[%s] %s: %d segments, %d levels, ABR %s, encryption %s",
                     cfg.name,
                     manifest.video,
                     count,
                     len(manifest.levels),
                     self.abr.describe(),
+                    client.encryption,
                 )
 
                 await self.player.start()

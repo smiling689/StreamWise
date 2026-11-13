@@ -23,6 +23,13 @@ segment integrity end to end.
 Payloads: ``HELLO``/``WELCOME``/``ERROR`` carry UTF-8 JSON objects; ``GET_MANIFEST`` carries
 the UTF-8 video name; ``MANIFEST`` carries the manifest JSON; ``GET_SEGMENT`` carries the
 UTF-8 segment file name; ``SEGMENT`` carries the raw MPEG-TS bytes; ``BYE`` is empty.
+
+Encryption (optional, see :mod:`streamwise.common.crypto`): the key exchange rides in the
+``encryption`` member of ``HELLO`` and ``WELCOME``. Every later message has bit 7 of the type
+byte set (``0x80 | type``) and an AES-256-GCM payload (ciphertext followed by a 16-byte tag);
+``payload_length`` and ``payload_crc32`` then describe the encrypted bytes. A plaintext
+``ERROR`` is still accepted, because a server must be able to reject a client whose keys do
+not match.
 """
 
 from __future__ import annotations
@@ -44,6 +51,8 @@ MAX_REQUEST_PAYLOAD = 4 * 1024
 """Upper bound for payloads the server accepts from clients."""
 MAX_RESPONSE_PAYLOAD = 256 * 1024 * 1024
 """Upper bound for payloads the client accepts from the server."""
+ENCRYPTED_FLAG = 0x80
+"""Bit 7 of the type byte: the payload is encrypted."""
 
 
 class MessageType(IntEnum):
@@ -59,8 +68,10 @@ class MessageType(IntEnum):
 
 class ErrorCode(IntEnum):
     BAD_REQUEST = 400
+    DECRYPTION_FAILED = 403
     NOT_FOUND = 404
     UNEXPECTED_MESSAGE = 409
+    ENCRYPTION_REQUIRED = 426
     INTERNAL_ERROR = 500
     UNSUPPORTED_VERSION = 505
 
@@ -75,6 +86,7 @@ class Header:
     request_id: int
     payload_length: int
     payload_crc32: int
+    encrypted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,9 +116,15 @@ def crc32(data: bytes) -> int:
 
 
 def encode_header(
-    msg_type: MessageType, request_id: int, payload_length: int, payload_crc32: int
+    msg_type: MessageType,
+    request_id: int,
+    payload_length: int,
+    payload_crc32: int,
+    *,
+    encrypted: bool = False,
 ) -> bytes:
-    return HEADER.pack(MAGIC, VERSION, int(msg_type), request_id, payload_length, payload_crc32)
+    type_byte = int(msg_type) | (ENCRYPTED_FLAG if encrypted else 0)
+    return HEADER.pack(MAGIC, VERSION, type_byte, request_id, payload_length, payload_crc32)
 
 
 def encode_message(msg: Message) -> bytes:
@@ -131,13 +149,14 @@ def decode_header(data: bytes, max_payload: int) -> Header:
         raise ProtocolError(f"bad magic {magic!r}")
     if version != VERSION:
         raise ProtocolError(f"unsupported protocol version {version}")
+    encrypted = bool(raw_type & ENCRYPTED_FLAG)
     try:
-        msg_type = MessageType(raw_type)
+        msg_type = MessageType(raw_type & ~ENCRYPTED_FLAG)
     except ValueError as exc:
         raise ProtocolError(f"unknown message type {raw_type}") from exc
     if length > max_payload:
         raise ProtocolError(f"payload length {length} exceeds limit {max_payload}")
-    return Header(msg_type, request_id, length, checksum)
+    return Header(msg_type, request_id, length, checksum, encrypted)
 
 
 async def read_header(reader: asyncio.StreamReader, max_payload: int) -> Header | None:

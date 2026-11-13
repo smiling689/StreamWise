@@ -7,6 +7,7 @@ dependencies:
   - ffmpeg          # segmentation, PSNR measurement, ffplay player
   - sqlite          # sqlite3 CLI for inspecting transmission logs
   - numpy
+  - cryptography    # AES-256-GCM and X25519 for encrypted connections
   - pandas
   - matplotlib
   - pytest
