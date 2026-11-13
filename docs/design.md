@@ -20,7 +20,7 @@ flowchart LR
     end
 
     subgraph client["Client (streamwise-client) x N"]
-        DL["Downloader"] -->|state| ABR["ABR<br/>throughput / BBA / fixed"]
+        DL["Downloader<br/>(segment or sliding-window transport)"] -->|state| ABR["ABR<br/>throughput / BBA / fixed / Q-learning"]
         ABR -->|level| DL
         DL --> CACHE[("download/&lt;session&gt;/")]
         DL --> PM["Playback model<br/>(buffer, stalls)"]
@@ -30,7 +30,7 @@ flowchart LR
     end
 
     SEG --> CAT
-    H <==>|"TCP: StreamWise protocol"| DL
+    H <==>|"TCP: StreamWise protocol<br/>(optionally AES-256-GCM)"| DL
     CL --> REP["Experiment report<br/>(QoE, PSNR, charts)"]
     TX --> REP
     SEG -.->|quality.json| REP
@@ -40,11 +40,13 @@ flowchart LR
 | --- | --- | --- |
 | Media preparation | `streamwise.media` | Transcode, segment, verify, write manifest, measure PSNR |
 | Protocol | `streamwise.common.protocol` | Message framing, integrity check, limits |
+| Encryption | `streamwise.common.crypto` | Key exchange, key schedule, AES-256-GCM records (E-02) |
 | Server | `streamwise.server` | Concurrent request handling, shaping, transmission log |
-| Client | `streamwise.client` | Download loop, playback model, player, cache, session log |
-| ABR | `streamwise.abr` | Bitrate decision behind one interface |
+| Client | `streamwise.client` | Download loop, playback model, player, cache, session log, sliding window (E-03) |
+| ABR | `streamwise.abr` | Bitrate decision behind one interface, including Q-learning (E-01) |
 | Metrics | `streamwise.analysis.metrics` | Rebuffering, bitrate, switches, QoE |
-| Experiments | `streamwise.experiments` | Scenario runner, traces, report and charts |
+| Simulator | `streamwise.sim` | Trace-driven simulator, Q-learning training and evaluation (E-01) |
+| Experiments | `streamwise.experiments` | Scenario runner, traces, report and charts, encryption and window benchmarks |
 
 ## 2. Media Preparation (V-01 to V-06)
 
@@ -299,8 +301,8 @@ flowchart TB
 All algorithms implement `AbrAlgorithm.choose(state) -> level`. The state contains the
 segment index, the manifest, the buffer level, the previous level, and the throughput and
 download-time history. Algorithms are created from spec strings such as
-`throughput:window=5,safety=0.9`, so a learning-based ABR can be added later without
-touching the client. Rates are compared using each level's **measured bandwidth** from the
+`throughput:window=5,safety=0.9`, so new algorithms plug in without touching the client;
+the Q-learning ABR (E-01) was added this way. Rates are compared using each level's **measured bandwidth** from the
 manifest rather than its nominal encoder bitrate: the network has to carry audio and TS
 overhead too, which adds 50 % at level 0 (600 vs. 400 kbps).
 
@@ -390,12 +392,24 @@ are grouped into segments, and a segment's PSNR comes from its mean MSE.
 common aggregates (`psnr_of_mean_mse` and `mean_segment_psnr`), so the report always states
 which one it uses.
 
-## 8. Limitations and Possible Extensions
+## 8. Extensions and Limitations
 
-- Bandwidth is emulated in the application, at the sender. Loopback RTT is negligible, so
-  latency effects are not modelled. Kernel-level emulation (`tc netem`) can be combined with
+Three extensions build on this design without changing its core interfaces:
+
+| Extension | Builds on | Document |
+| --- | --- | --- |
+| E-01 Q-learning ABR | The ABR interface and a simulator of the client/server rules | [intelligent-abr.md](intelligent-abr.md) |
+| E-02 AES-256-GCM encryption | The `HELLO`/`WELCOME` handshake and the message header | [encryption.md](encryption.md) |
+| E-03 Sliding-window streaming | Request pipelining, chunk requests, a client connection pool | [sliding-window.md](sliding-window.md) |
+
+Limitations:
+
+- **Emulated network.** Bandwidth is emulated in the application, at the sender, and the
+  RTT only as a per-request delay (`--delay-ms`). Loopback has no packet loss, so TCP's own
+  loss recovery is not exercised. Kernel-level emulation (`tc netem`) can be combined with
   the same code.
-- One request is in flight per connection; HTTP/2-style pipelining is not needed for
-  sequential segment fetching.
-- The learning-based ABR (extension E-01) is trained in a simulator of this system; see
-  [intelligent-abr.md](intelligent-abr.md).
+- **One video ladder per model.** The Q-learning model is trained for the ladder of `bbb`
+  and must be retrained for different content.
+- **Segment-granular decisions.** The ABR decides once per segment, so even the
+  sliding-window transport pays one round trip per segment (see
+  [sliding-window.md](sliding-window.md)).
