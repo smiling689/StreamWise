@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streamwise"
-version = "0.1.0"
-description = "TCP-based segmented video streaming with adaptive bitrate"
+version = "1.0.0"
+description = "TCP-based segmented video streaming with adaptive bitrate, encryption and sliding-window transport"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["numpy", "cryptography>=42"]

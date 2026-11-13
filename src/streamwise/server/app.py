@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from streamwise import __version__
 from streamwise.common import crypto
 from streamwise.common import protocol as proto
 from streamwise.common.protocol import ErrorCode, Message, MessageType, ProtocolError
@@ -25,7 +26,7 @@ from streamwise.server.txlog import Transmission, TransmissionLog
 
 log = logging.getLogger(__name__)
 
-SERVER_NAME = "StreamWise/0.1"
+SERVER_NAME = f"StreamWise/{__version__}"
 ENCRYPTION_MODES = ("off", "optional", "required")
 OFFLOAD_BYTES = 256 * 1024
 """Encrypt payloads at least this large in a worker thread, off the event loop."""
