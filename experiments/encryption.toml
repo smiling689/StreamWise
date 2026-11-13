@@ -1,0 +1,34 @@
+# Encryption overhead: the main evaluation with every session over AES-256-GCM.
+# Compare with the plaintext run of experiments/default.toml.
+# Run from the repository root:  streamwise-experiment run experiments/encryption.toml
+video = "bbb"
+abrs = ["throughput", "buffer", "fixed:3"]   # fixed:3 = always 720p (2500k)
+repeats = 1
+max_buffer_s = 30.0
+startup_buffer_s = 5.0
+base_port = 9300
+encryption = true
+
+[[scenario]]
+name = "const_1mbps"
+rate_mbps = 1.0
+
+[[scenario]]
+name = "const_2mbps"
+rate_mbps = 2.0
+
+[[scenario]]
+name = "const_4mbps"
+rate_mbps = 4.0
+
+[[scenario]]
+name = "const_8mbps"
+rate_mbps = 8.0
+
+[[scenario]]
+name = "drop"
+trace = "traces/drop.txt"
+
+[[scenario]]
+name = "fluctuating"
+trace = "traces/fluctuating.txt"
