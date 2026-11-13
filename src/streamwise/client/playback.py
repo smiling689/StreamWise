@@ -106,11 +106,6 @@ class PlaybackModel:
     def stall_time(self) -> float:
         return sum(s.duration for s in self.stalls)
 
-    def current_stall(self, now: float | None = None) -> float:
-        if self._stall_start is None:
-            return 0.0
-        return (self._clock() if now is None else now) - self._stall_start
-
     async def wait_for_buffer_below(self, threshold_s: float) -> None:
         """Wait until the buffer level is at most ``threshold_s``.
 

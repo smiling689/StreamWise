@@ -30,10 +30,6 @@ class Level:
         return f"{self.height}p"
 
     @property
-    def bitrate_bps(self) -> int:
-        return self.bitrate_kbps * 1000
-
-    @property
     def label(self) -> str:
         return f"{self.resolution}-{self.bitrate_kbps}k"
 
