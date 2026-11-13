@@ -197,8 +197,10 @@ async def test_misbehaving_peers_do_not_affect_others(tmp_path: Path, fake_media
     assert len(anonymous) == 2
     assert anonymous[0] == "closed_before_hello"
     assert anonymous[1].startswith("protocol_error")
-    aborted = query(db, "SELECT COUNT(*) FROM transmissions WHERE status = 'aborted'")
-    assert aborted == [(1,)]
+    aborted = query(db, "SELECT bytes FROM transmissions WHERE status = 'aborted'")
+    assert len(aborted) == 1
+    # The partial transfer is logged with the bytes that were sent before the abort.
+    assert 0 < aborted[0][0] < manifest.segment_size(2, 0)
 
 
 async def test_server_unreachable(tmp_path: Path) -> None:

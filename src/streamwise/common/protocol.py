@@ -23,6 +23,11 @@ segment integrity end to end.
 Payloads: ``HELLO``/``WELCOME``/``ERROR`` carry UTF-8 JSON objects; ``GET_MANIFEST`` carries
 the UTF-8 video name; ``MANIFEST`` carries the manifest JSON; ``GET_SEGMENT`` carries the
 UTF-8 segment file name; ``SEGMENT`` carries the raw MPEG-TS bytes; ``BYE`` is empty.
+``GET_CHUNK`` carries a byte range of a segment (``!QI`` offset and length, then the UTF-8
+file name) and ``CHUNK`` the bytes of that range (sliding-window transport, extension E-03).
+
+A client may pipeline requests: it can send several before the first response arrives. The
+server answers them strictly in request order.
 
 Encryption (optional, see :mod:`streamwise.common.crypto`): the key exchange rides in the
 ``encryption`` member of ``HELLO`` and ``WELCOME``. Every later message has bit 7 of the type
@@ -51,6 +56,9 @@ MAX_REQUEST_PAYLOAD = 4 * 1024
 """Upper bound for payloads the server accepts from clients."""
 MAX_RESPONSE_PAYLOAD = 256 * 1024 * 1024
 """Upper bound for payloads the client accepts from the server."""
+MAX_CHUNK = 1024 * 1024
+"""Largest byte range a ``GET_CHUNK`` may ask for."""
+CHUNK_RANGE = struct.Struct("!QI")
 ENCRYPTED_FLAG = 0x80
 """Bit 7 of the type byte: the payload is encrypted."""
 
@@ -64,6 +72,8 @@ class MessageType(IntEnum):
     SEGMENT = 6
     ERROR = 7
     BYE = 8
+    GET_CHUNK = 9
+    CHUNK = 10
 
 
 class ErrorCode(IntEnum):
@@ -71,6 +81,7 @@ class ErrorCode(IntEnum):
     DECRYPTION_FAILED = 403
     NOT_FOUND = 404
     UNEXPECTED_MESSAGE = 409
+    RANGE_NOT_SATISFIABLE = 416
     ENCRYPTION_REQUIRED = 426
     INTERNAL_ERROR = 500
     UNSUPPORTED_VERSION = 505
@@ -139,6 +150,23 @@ def json_message(msg_type: MessageType, request_id: int, obj: dict[str, Any]) ->
 
 def error_message(request_id: int, code: ErrorCode, message: str) -> Message:
     return json_message(MessageType.ERROR, request_id, {"code": int(code), "message": message})
+
+
+def chunk_request(filename: str, offset: int, length: int) -> bytes:
+    """Payload of a ``GET_CHUNK`` request."""
+    return CHUNK_RANGE.pack(offset, length) + filename.encode()
+
+
+def parse_chunk_request(payload: bytes) -> tuple[str, int, int]:
+    """Inverse of :func:`chunk_request`: ``(filename, offset, length)``."""
+    if len(payload) <= CHUNK_RANGE.size:
+        raise ProtocolError("GET_CHUNK payload too short")
+    offset, length = CHUNK_RANGE.unpack_from(payload)
+    try:
+        filename = payload[CHUNK_RANGE.size :].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProtocolError("GET_CHUNK file name is not valid UTF-8") from exc
+    return filename, offset, length
 
 
 def decode_header(data: bytes, max_payload: int) -> Header:

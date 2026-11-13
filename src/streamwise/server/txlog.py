@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS transmissions (
     end_time       REAL NOT NULL,    -- Unix time (s) the last byte was handed to TCP
     duration_s     REAL NOT NULL,
     throughput_bps REAL,
-    status         TEXT NOT NULL     -- ok | not_found | aborted | error
+    status         TEXT NOT NULL,    -- ok | not_found | aborted | error
+    chunk_offset   INTEGER           -- byte offset for GET_CHUNK, NULL for whole segments
 );
 CREATE INDEX IF NOT EXISTS idx_transmissions_session ON transmissions(session_id);
 """
@@ -52,6 +53,7 @@ class Transmission:
     start_time: float
     duration_s: float
     status: str
+    chunk_offset: int | None = None
 
     @property
     def throughput_bps(self) -> float | None:
@@ -62,7 +64,11 @@ class Transmission:
 
 class TransmissionLog:
     def __init__(self, path: Path) -> None:
-        self._db = SqliteWriter(path, SCHEMA, {"sessions": [("encryption", "TEXT")]})
+        self._db = SqliteWriter(
+            path,
+            SCHEMA,
+            {"sessions": [("encryption", "TEXT")], "transmissions": [("chunk_offset", "INTEGER")]},
+        )
 
     @property
     def path(self) -> Path:
@@ -90,7 +96,8 @@ class TransmissionLog:
         self._db.execute(
             "INSERT INTO transmissions (session_id, request_id, segment, video, seq, level,"
             " resolution, bitrate_kbps, bytes, start_time, end_time, duration_s,"
-            " throughput_bps, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " throughput_bps, status, chunk_offset)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 t.session_id,
                 t.request_id,
@@ -106,6 +113,7 @@ class TransmissionLog:
                 t.duration_s,
                 t.throughput_bps,
                 t.status,
+                t.chunk_offset,
             ),
         )
 

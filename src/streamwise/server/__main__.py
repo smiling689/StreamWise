@@ -30,9 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     rate.add_argument("--trace", type=Path, help="bandwidth trace file ('<time_s> <mbps>' lines)")
     parser.add_argument(
         "--shaping-scope",
-        choices=["connection", "global"],
+        choices=["connection", "client", "global"],
         default="connection",
-        help="'connection': independent limit per client, trace clock starts at connect; "
+        help="'connection': independent limit per connection, trace clock starts at connect; "
+        "'client': one limit per client name, shared by its connections; "
         "'global': one shared limit, trace clock starts at server start (default: %(default)s)",
     )
     parser.add_argument(
@@ -49,6 +50,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--psk-file",
         type=Path,
         help="pre-shared key file mixed into the key derivation (authenticates clients)",
+    )
+    parser.add_argument(
+        "--delay-ms",
+        type=float,
+        default=0.0,
+        help="emulated round-trip delay added to every request (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--reset-after-s",
+        type=float,
+        help="fault injection: abort every connection this many seconds after it opens",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     return parser
@@ -80,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
             shaping=ShapingConfig(trace, args.shaping_scope, args.burst_kb * 1024),
             encryption=args.encryption,
             psk=psk,
+            delay_s=args.delay_ms / 1000,
+            reset_after_s=args.reset_after_s,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
