@@ -68,6 +68,8 @@ streamwise-server --trace traces/demo_shared.txt --shaping-scope global   # one 
 | `--rate-mbps` / `--trace` | none | Constant limit or bandwidth trace file |
 | `--shaping-scope` | `connection` | `connection`: independent limit per client, trace starts at connect; `global`: one limit shared by all clients, trace starts at server start |
 | `--burst-kb` | 32 | Token-bucket size |
+| `--encryption` | `optional` | `off`, `optional` (encrypt when the client asks) or `required` (reject plaintext clients) |
+| `--psk-file` | none | Pre-shared key file; clients must use the same key |
 
 A trace file holds `<time_s> <mbps>` lines; `#` starts a comment, and each rate holds until
 the next line. `streamwise-experiment gen-trace FILE --seed N` generates a fluctuating trace.
@@ -105,11 +107,28 @@ streamwise-client --name probe --player none --segments 6   # headless, first 6 
 | `--window-size`, `--window-pos` | `640x360`, auto | Player window geometry |
 | `--download-dir` | `download` | Segment cache root |
 | `--log-db` / `--no-log` | `logs/client.db` | SQLite session log |
+| `--encrypt` | off | Require an AES-256-GCM encrypted connection |
+| `--psk-file` | none | Pre-shared key file; authenticates the server (implies `--encrypt`) |
 
 The client prints one line per segment (level, measured throughput, download time, buffer
 level, stalls), marks `UP`/`DOWN` switches, and ends with a summary. Each segment is stored
 in `download/<session>/` until it has been played, and the directory is removed when the
 client exits, including after Ctrl-C.
+
+### Encrypted Streaming (extension E-02)
+
+```bash
+openssl rand -hex 32 > secret.psk                  # shared key (keep it out of git)
+streamwise-server --encryption required --psk-file secret.psk
+streamwise-client --name client1 --psk-file secret.psk
+```
+
+`--encrypt` without a key also works; it protects against eavesdropping but not against an
+active man-in-the-middle (see [encryption.md](encryption.md)). A client with a different key
+fails with `key confirmation failed`, and a plaintext client gets `server error 426`. The
+`encryption` column of the server's `sessions` table records what each connection used.
+`streamwise-experiment crypto-bench` measures the encryption cost, and
+`streamwise-experiment run experiments/encryption.toml` repeats the main evaluation encrypted.
 
 ## 5. Live Demo
 
@@ -164,7 +183,9 @@ tshark -X lua_script:tools/wireshark/streamwise.lua -r logs/session.pcapng -Y st
 
 For the Wireshark GUI, copy `tools/wireshark/streamwise.lua` into the personal plugins
 folder (*Help > About Wireshark > Folders*) and restart Wireshark. The filter `streamwise`
-then shows decoded messages, e.g. `GET_SEGMENT id=3 bbb-1080p-8000k-2.ts`. Use
+then shows decoded messages, e.g. `GET_SEGMENT id=3 bbb-1080p-8000k-2.ts`. On an encrypted
+connection only `HELLO` and `WELCOME` are readable; later messages appear as, e.g.,
+`GET_SEGMENT [encrypted] id=3 (35 bytes)` with their ciphertext and GCM tag. Use
 *Statistics > I/O Graphs* or *Statistics > TCP Stream Graphs* to show throughput changes
 during a bandwidth drop.
 

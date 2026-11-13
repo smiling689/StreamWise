@@ -136,17 +136,17 @@ verifies every payload end to end.
 | --- | --- | --- |
 | magic | 2 B | ASCII `SW`; rejects non-StreamWise peers immediately |
 | version | 1 B | Protocol version, currently `1` |
-| type | 1 B | Message type (table below) |
+| type | 1 B | Message type (table below); bit 7 (`0x80`) marks an encrypted payload |
 | request_id | 4 B | Chosen by the client and echoed in the response |
 | payload_length | 4 B | Payload size; limited to 4 KiB for requests and 256 MiB for responses |
-| payload_crc32 | 4 B | CRC-32 (IEEE 802.3) of the payload |
+| payload_crc32 | 4 B | CRC-32 (IEEE 802.3) of the payload (of the ciphertext if encrypted) |
 
 All integers are unsigned and big-endian. The header is 16 bytes.
 
 | Type | Value | Direction | Payload |
 | --- | --- | --- | --- |
-| `HELLO` | 1 | C → S | JSON `{"client": "<name>"}` |
-| `WELCOME` | 2 | S → C | JSON `{"session_id", "server", "videos"}` |
+| `HELLO` | 1 | C → S | JSON `{"client": "<name>"}`, optionally `"encryption"` (key exchange offer) |
+| `WELCOME` | 2 | S → C | JSON `{"session_id", "server", "videos"}`, optionally `"encryption"` (answer) |
 | `GET_MANIFEST` | 3 | C → S | UTF-8 video name |
 | `MANIFEST` | 4 | S → C | Manifest JSON |
 | `GET_SEGMENT` | 5 | C → S | UTF-8 segment file name, e.g. `bbb-720p-2500k-7.ts` |
@@ -155,7 +155,14 @@ All integers are unsigned and big-endian. The header is 16 bytes.
 | `BYE` | 8 | C → S | empty |
 
 Error codes: `400` bad request (malformed message; the server then closes the connection),
-`404` unknown video or segment, `409` unexpected message type, `500` internal error.
+`403` an encrypted request failed authentication, `404` unknown video or segment, `409`
+unexpected message type, `426` the server requires encryption, `500` internal error.
+
+**Encryption (extension E-02).** If the client offers a key exchange in `HELLO` and the
+server accepts it in `WELCOME`, every later message in both directions is encrypted with
+AES-256-GCM: the type byte has bit 7 set, and the payload is ciphertext followed by a 16-byte
+authentication tag. The handshake, key schedule and security properties are described in
+[encryption.md](encryption.md).
 
 ### 3.2 Interaction
 
@@ -191,6 +198,8 @@ sequenceDiagram
 - **Timeouts.** A peer must send `HELLO` within 10 s and then a request at least every
   120 s. The client aborts if no byte arrives for 30 s; a slow download that keeps making
   progress never times out.
+- **Confidentiality and authenticity.** Optional end-to-end AES-256-GCM encryption with an
+  X25519 key exchange and an optional pre-shared key; see [encryption.md](encryption.md).
 - **Integrity at startup.** The server checks every segment listed in each manifest for
   existence and exact size before it starts listening.
 

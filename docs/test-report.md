@@ -197,7 +197,15 @@ vs. 0.570 for throughput-based ABR and 0.300 for BBA). It also avoids the failur
 rule-based algorithms: 1 stall instead of 5 after the bandwidth drop, and 1 instead of 10 on
 the tram trace.
 
-## 6. Reproducibility and Limitations
+## 6. Encryption (Extension E-02)
+
+`experiments/encryption.toml` repeats the main evaluation of §3 with every session encrypted
+(AES-256-GCM). Every one of the 18 sessions has the same average bitrate, stalls, stall time
+and switches as its plaintext counterpart. QoE per segment differs by at most 0.005. The
+cost is about 1.5 ms of CPU to encrypt the largest segment and 16 bytes per message. The
+tests, the security properties and the cost measurement are in [encryption.md](encryption.md).
+
+## 7. Reproducibility and Limitations
 
 - **Reproducibility.** The BBA 10 s / 14 s configuration ran twice, in the main and in the
   sensitivity experiment, and gave identical metrics in all five shared scenarios (e.g.
@@ -212,7 +220,7 @@ the tram trace.
 - **Single video.** Results hold for Big Buck Bunny's content complexity; other content
   shifts the bitrate–PSNR curve.
 
-## 7. Packet Capture (T-04)
+## 8. Packet Capture (T-04)
 
 `tools/wireshark/streamwise.lua` decodes the protocol. It was checked on a synthetic capture
 of a full session (HELLO, WELCOME, GET_MANIFEST, MANIFEST, GET_SEGMENT, a SEGMENT spanning
@@ -223,11 +231,13 @@ procedure is in the [user manual, §7](user-manual.md#7-packet-capture-with-wire
 > TODO (team): add screenshots of a live capture — the decoded message list and a TCP
 > throughput graph across a bandwidth drop.
 
-## 8. Reproducing the Results
+## 9. Reproducing the Results
 
 ```bash
 streamwise-experiment run experiments/default.toml --out results/default
 streamwise-experiment run experiments/bba_sensitivity.toml --out results/bba_sensitivity
+streamwise-experiment run experiments/encryption.toml --out results/encryption
+streamwise-experiment crypto-bench
 ```
 
 Each run takes about 8 minutes. The output directories contain the summary tables, all
