@@ -80,11 +80,16 @@ class BufferAbr(AbrAlgorithm):
     in between. To avoid oscillation the level only changes when ``f(B)`` crosses the next
     higher rate (switch up to the highest rate strictly below ``f(B)``) or the next lower
     rate (switch down to the lowest rate strictly above ``f(B)``).
+
+    Defaults for 5 s segments and a 30 s buffer cap: the reservoir covers two segments, so
+    the lowest level is kept until a slow download can no longer drain the buffer, and
+    ``reservoir + cushion`` (24 s) stays below the download gate (30 s - 5 s = 25 s), so the
+    top level is reachable.
     """
 
     name = "buffer"
 
-    def __init__(self, reservoir_s: float = 5.0, cushion_s: float = 15.0) -> None:
+    def __init__(self, reservoir_s: float = 10.0, cushion_s: float = 14.0) -> None:
         if reservoir_s < 0 or cushion_s <= 0:
             raise ValueError("reservoir must be >= 0 and cushion > 0")
         self.reservoir_s = reservoir_s

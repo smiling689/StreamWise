@@ -227,9 +227,12 @@ def plot_timeline(
         rows = data[data["abr"] == abr].sort_values("seq")
         if rows.empty:
             continue
+        n_stalls = stalls[stalls["abr"] == abr]["stall_count"]
+        count = int(n_stalls.iloc[0]) if not n_stalls.empty else 0
+        label = f"{abr} ({count} stall{'' if count == 1 else 's'})"
         t = [*rows["request_t"], float(rows["done_t"].iloc[-1])]
         b = [*(rows["bitrate_kbps"] / 1000), float(rows["bitrate_kbps"].iloc[-1]) / 1000]
-        top.step(t, b, where="post", color=colors[abr], linewidth=2, label=abr)
+        top.step(t, b, where="post", color=colors[abr], linewidth=2, label=label)
         bottom.plot(
             rows["done_t"],
             rows["buffer_after_s"],
@@ -237,18 +240,8 @@ def plot_timeline(
             linewidth=2,
             marker="o",
             markersize=3,
-            label=abr,
+            label=label,
         )
-        n_stalls = stalls[stalls["abr"] == abr]["stall_count"]
-        if not n_stalls.empty and n_stalls.iloc[0] > 0:
-            bottom.annotate(
-                f"{int(n_stalls.iloc[0])} stall(s)",
-                (rows["done_t"].iloc[-1], rows["buffer_after_s"].iloc[-1]),
-                textcoords="offset points",
-                xytext=(4, 0),
-                fontsize=7,
-                color=INK_2,
-            )
     top.set_title(f"{scenario}: requested bitrate vs. link bandwidth", loc="left")
     top.set_ylabel("Mbit/s")
     top.set_ylim(0, max(ys) * 1.1)

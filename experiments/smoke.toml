@@ -1,6 +1,6 @@
 # Quick check of the experiment pipeline (about 40 s): first 6 segments only.
 video = "bbb"
-abrs = ["throughput", "buffer", "fixed:2"]
+abrs = ["throughput", "buffer", "fixed:3"]
 segments = 6
 max_buffer_s = 30.0
 startup_buffer_s = 5.0

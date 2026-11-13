@@ -33,6 +33,7 @@ class Rung:
 
 
 DEFAULT_LADDER: tuple[Rung, ...] = (
+    Rung(240, 400),
     Rung(360, 800),
     Rung(480, 1200),
     Rung(720, 2500),

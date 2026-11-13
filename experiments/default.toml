@@ -1,7 +1,7 @@
 # Main evaluation: rule-based ABRs and a fixed-bitrate baseline under different networks.
 # Run from the repository root:  streamwise-experiment run experiments/default.toml
 video = "bbb"
-abrs = ["throughput", "buffer", "fixed:2"]   # fixed:2 = always 720p (2500k)
+abrs = ["throughput", "buffer", "fixed:3"]   # fixed:3 = always 720p (2500k)
 repeats = 1
 max_buffer_s = 30.0
 startup_buffer_s = 5.0

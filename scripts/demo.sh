@@ -40,7 +40,7 @@ start_client() {  # name abr x-position [extra args]
 }
 start_client client1 throughput 0
 start_client client2 buffer 660 --mute
-start_client client3 fixed:2 1320 --mute   # non-adaptive baseline (720p)
+start_client client3 fixed:3 1320 --mute   # non-adaptive baseline (720p)
 
 # Wait for the three clients (the server keeps running until cleanup).
 wait "${pids[@]:1}"

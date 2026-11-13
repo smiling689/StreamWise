@@ -1,0 +1,31 @@
+# Sensitivity of buffer-based ABR (BBA-0) to its reservoir / cushion.
+# reservoir + cushion = 20-24 s in all variants (top level reachable below the 25 s gate).
+video = "bbb"
+abrs = [
+    "buffer:reservoir_s=5,cushion_s=15",
+    "buffer:reservoir_s=10,cushion_s=14",
+    "buffer:reservoir_s=15,cushion_s=9",
+]
+max_buffer_s = 30.0
+startup_buffer_s = 5.0
+base_port = 9400
+
+[[scenario]]
+name = "const_1mbps"
+rate_mbps = 1.0
+
+[[scenario]]
+name = "const_2mbps"
+rate_mbps = 2.0
+
+[[scenario]]
+name = "const_4mbps"
+rate_mbps = 4.0
+
+[[scenario]]
+name = "drop"
+trace = "traces/drop.txt"
+
+[[scenario]]
+name = "fluctuating"
+trace = "traces/fluctuating.txt"
