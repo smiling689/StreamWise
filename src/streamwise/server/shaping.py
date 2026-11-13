@@ -252,7 +252,7 @@ class TokenBucket:
                 await asyncio.sleep(self._trace.time_to_send(now - self._start, deficit))
 
 
-ShapingScope = Literal["connection", "global"]
+ShapingScope = Literal["connection", "client", "global"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +263,9 @@ class ShapingConfig:
     starting at connection time (independent links; reproducible experiments).
     ``scope="global"``: all connections share one bucket whose trace clock starts when the
     server starts (one shared bottleneck; live demos).
+    ``scope="client"``: all connections with the same client name share one bucket whose trace
+    clock starts at that client's first connection (one access link per client, however many
+    connections it opens; used by the sliding-window transport).
     """
 
     trace: BandwidthTrace | None = None
@@ -274,6 +277,7 @@ class ShaperFactory:
     def __init__(self, config: ShapingConfig) -> None:
         self.config = config
         self._global: TokenBucket | None = None
+        self._clients: dict[str, TokenBucket] = {}
         if config.trace is not None and config.scope == "global":
             self._global = TokenBucket(config.trace, config.burst_bytes)
 
@@ -283,3 +287,19 @@ class ShaperFactory:
         if self._global is not None:
             return self._global
         return TokenBucket(self.config.trace, self.config.burst_bytes)
+
+    def for_client(self, client_name: str, connection_shaper: Shaper) -> Shaper:
+        """Shaper once the client has named itself in ``HELLO``.
+
+        With scope ``client``, all connections of one client name share a bucket whose trace
+        clock starts at that client's first connection (its access link); otherwise the
+        connection keeps ``connection_shaper``.
+        """
+        if self.config.trace is None or self.config.scope != "client":
+            return connection_shaper
+        bucket = self._clients.get(client_name)
+        if bucket is None:
+            bucket = self._clients[client_name] = TokenBucket(
+                self.config.trace, self.config.burst_bytes
+            )
+        return bucket

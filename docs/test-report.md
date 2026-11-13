@@ -205,7 +205,20 @@ and switches as its plaintext counterpart. QoE per segment differs by at most 0.
 cost is about 1.5 ms of CPU to encrypt the largest segment and 16 bytes per message. The
 tests, the security properties and the cost measurement are in [encryption.md](encryption.md).
 
-## 7. Reproducibility and Limitations
+## 7. Sliding-Window Streaming (Extension E-03)
+
+A 10-minute stream at 4 Mbit/s was played while the server aborted every connection after
+30 s or 10 s:
+
+- **Segment transport.** The session failed at the first reset.
+- **Window transport.** Over one or two connections it played all 120 segments through up
+  to 114 reconnects, with no stall and the same QoE as without faults (3.006 per segment).
+  Only 0.25–1.3 % of the bytes sent were lost in transit.
+
+The throughput sweep over window size and RTT matches the sliding-window model within
+0.9 Mbit/s. Details are in [sliding-window.md](sliding-window.md).
+
+## 8. Reproducibility and Limitations
 
 - **Reproducibility.** The BBA 10 s / 14 s configuration ran twice, in the main and in the
   sensitivity experiment, and gave identical metrics in all five shared scenarios (e.g.
@@ -220,7 +233,7 @@ tests, the security properties and the cost measurement are in [encryption.md](e
 - **Single video.** Results hold for Big Buck Bunny's content complexity; other content
   shifts the bitrate–PSNR curve.
 
-## 8. Packet Capture (T-04)
+## 9. Packet Capture (T-04)
 
 `tools/wireshark/streamwise.lua` decodes the protocol. It was checked on a synthetic capture
 of a full session (HELLO, WELCOME, GET_MANIFEST, MANIFEST, GET_SEGMENT, a SEGMENT spanning
@@ -231,13 +244,14 @@ procedure is in the [user manual, §7](user-manual.md#7-packet-capture-with-wire
 > TODO (team): add screenshots of a live capture — the decoded message list and a TCP
 > throughput graph across a bandwidth drop.
 
-## 9. Reproducing the Results
+## 10. Reproducing the Results
 
 ```bash
 streamwise-experiment run experiments/default.toml --out results/default
 streamwise-experiment run experiments/bba_sensitivity.toml --out results/bba_sensitivity
 streamwise-experiment run experiments/encryption.toml --out results/encryption
 streamwise-experiment crypto-bench
+streamwise-experiment window-bench
 ```
 
 Each run takes about 8 minutes. The output directories contain the summary tables, all

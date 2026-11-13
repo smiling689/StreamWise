@@ -18,6 +18,7 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -25,9 +26,10 @@ from streamwise.abr import AbrAlgorithm, AbrState
 from streamwise.analysis.metrics import SessionMetrics, compute_metrics
 from streamwise.client.cache import SegmentCache
 from streamwise.client.clientlog import ClientLog, SegmentRecord
-from streamwise.client.connection import ServerError, StreamClient
+from streamwise.client.connection import FetchResult, ServerError, StreamClient
 from streamwise.client.playback import PlaybackModel, Stall
 from streamwise.client.player import NullPlayer, Player
+from streamwise.client.window import SlidingWindowFetcher, WindowConfig, WindowStats
 from streamwise.common.crypto import load_psk
 from streamwise.common.manifest import Manifest
 from streamwise.common.protocol import ProtocolError
@@ -57,6 +59,21 @@ class ClientConfig:
     """Require an AES-256-GCM encrypted connection."""
     psk_file: Path | None = None
     """Pre-shared key file; authenticates the server (implies ``encrypt``)."""
+    transport: str = "segment"
+    """'segment': one GET_SEGMENT per segment on one connection; 'window': sliding window of
+    GET_CHUNK requests over ``connections`` connections (survives connection failures)."""
+    window: int = 16
+    chunk_kb: int = 64
+    connections: int = 1
+
+    def __post_init__(self) -> None:
+        if self.transport not in ("segment", "window"):
+            raise ValueError("transport must be 'segment' or 'window'")
+        if self.transport == "window":
+            self.window_config()  # validates the window parameters
+
+    def window_config(self) -> WindowConfig:
+        return WindowConfig(self.window, self.chunk_kb * 1024, self.connections)
 
     def validate(self, manifest: Manifest) -> None:
         longest = max(manifest.segment_durations)
@@ -78,6 +95,8 @@ class SessionResult:
     segments: list[SegmentRecord] = field(default_factory=list)
     stalls: list[Stall] = field(default_factory=list)
     metrics: SessionMetrics | None = None
+    transport: WindowStats | None = None
+    """Sliding-window statistics (``transport='window'`` only)."""
 
 
 class StreamingSession:
@@ -112,20 +131,25 @@ class StreamingSession:
                 {k: str(v) if isinstance(v, Path) else v for k, v in asdict(cfg).items()},
             )
         client: StreamClient | None = None
+        fetcher: SlidingWindowFetcher | None = None
         cache: SegmentCache | None = None
         model: PlaybackModel | None = None
         try:
             try:
                 psk = load_psk(cfg.psk_file) if cfg.psk_file else None
-                client = await StreamClient.connect(
-                    cfg.host,
-                    cfg.port,
-                    cfg.name,
-                    connect_timeout=cfg.connect_timeout,
-                    stall_timeout=cfg.stall_timeout,
-                    encrypt=cfg.encrypt or psk is not None,
-                    psk=psk,
-                )
+
+                async def connect() -> StreamClient:
+                    return await StreamClient.connect(
+                        cfg.host,
+                        cfg.port,
+                        cfg.name,
+                        connect_timeout=cfg.connect_timeout,
+                        stall_timeout=cfg.stall_timeout,
+                        encrypt=cfg.encrypt or psk is not None,
+                        psk=psk,
+                    )
+
+                client = await connect()
                 if clog:
                     clog.server_session(self.session_id, client.session_id)
                 manifest = await client.get_manifest(cfg.video)
@@ -144,6 +168,19 @@ class StreamingSession:
                     self.abr.describe(),
                     client.encryption,
                 )
+
+                if cfg.transport == "window":
+                    # The window owns the first connection from here on.
+                    fetcher = SlidingWindowFetcher(connect, cfg.window_config(), first=client)
+                    client = None
+                    self.result.transport = fetcher.stats
+                    await fetcher.start()
+                    fetch = fetcher.fetch_segment
+                else:
+                    plain = client
+
+                    async def fetch(filename: str, size: int) -> FetchResult:
+                        return await plain.fetch_segment(filename)
 
                 await self.player.start()
                 consumers = frozenset({PLAYBACK, PLAYER} if self.player.alive else {PLAYBACK})
@@ -171,7 +208,7 @@ class StreamingSession:
                     tg.create_task(model.run(on_segment_played=on_played, on_stall=on_stall))
                     tg.create_task(self._feed(cache, feed_queue, count))
                     tg.create_task(
-                        self._download(client, manifest, model, cache, feed_queue, count, clog)
+                        self._download(fetch, manifest, model, cache, feed_queue, count, clog)
                     )
 
                 self.result.status = "completed"
@@ -193,6 +230,8 @@ class StreamingSession:
                 await cache.aclose()
             if client is not None:
                 await client.close()
+            if fetcher is not None:
+                await fetcher.aclose()
             if clog:
                 clog.session_finished(
                     self.session_id,
@@ -200,6 +239,7 @@ class StreamingSession:
                     self.result.status,
                     self.result.error,
                     self.result.metrics,
+                    self.result.transport,
                 )
                 clog.close()
         return self.result
@@ -221,7 +261,7 @@ class StreamingSession:
 
     async def _download(
         self,
-        client: StreamClient,
+        fetch: Callable[[str, int], Awaitable[FetchResult]],
         manifest: Manifest,
         model: PlaybackModel,
         cache: SegmentCache,
@@ -252,8 +292,8 @@ class StreamingSession:
             if not 0 <= level < len(manifest.levels):
                 raise ValueError(f"ABR returned invalid level {level}")
             filename = manifest.segment_filename(level, seq)
-            fetched = await client.fetch_segment(filename)
             expected = manifest.segment_size(level, seq)
+            fetched = await fetch(filename, expected)
             if len(fetched.data) != expected:
                 raise ProtocolError(
                     f"{filename}: got {len(fetched.data)} bytes, expected {expected}"

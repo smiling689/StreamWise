@@ -114,7 +114,7 @@ The mandatory part plus three extensions worth 50 points in total (E-01, E-02, E
 | --- | --- | --- | --- |
 | E-01 | Intelligent ABR (Q-Learning) | 25 | done — [docs/intelligent-abr.md](intelligent-abr.md) |
 | E-02 | End-to-end AES encryption | 10 | done — [docs/encryption.md](encryption.md) |
-| E-03 | Sliding-window streaming | 15 | in scope |
+| E-03 | Sliding-window streaming | 15 | done — [docs/sliding-window.md](sliding-window.md) |
 | E-04 | Dynamic path optimization | 25 | not planned |
 | E-05 | Student-defined open problem | 10–25 | not planned (proposal deadline passed) |
 
@@ -133,6 +133,14 @@ The mandatory part plus three extensions worth 50 points in total (E-01, E-02, E
 - [x] **E-02c** Server modes off / optional / required; clear errors for missing encryption and wrong keys
 - [x] **E-02d** Tests for tampering, replay, wrong keys and plaintext leakage; Wireshark shows encrypted messages
 - [x] **E-02e** Overhead measured (CPU, bytes, unshaped throughput) and QoE compared with plaintext streaming
+
+**E-03 Sliding-window streaming**
+
+- [x] **E-03a** Chunk requests (`GET_CHUNK`/`CHUNK`) with request pipelining on the server
+- [x] **E-03b** Receiver-side sliding window over one or more connections: bounded requests in flight, out-of-order reassembly with bounded memory, in-order delivery
+- [x] **E-03c** Selective repeat: after a connection failure only the lost chunks are requested again; connections are re-established with backoff
+- [x] **E-03d** Seamless playback of a long (10-minute) stream while connections are reset repeatedly, compared with the segment transport
+- [x] **E-03e** Throughput vs. window size and round-trip time measured and compared with the sliding-window model
 
 ## Milestones
 

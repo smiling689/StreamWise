@@ -10,6 +10,7 @@ StreamWise streams segmented video over a custom TCP protocol and plays it in re
 - **ABR** — throughput-based (harmonic mean), buffer-based (BBA-0), and fixed baselines behind a pluggable interface.
 - **Q-learning ABR** (extension) — trained offline in a simulator that is validated against the real system; evaluated on held-out real 3G traces, where it halves the share of sessions that stall.
 - **Encryption** (extension) — optional end-to-end AES-256-GCM with an X25519 key exchange in the handshake and an optional pre-shared key; tampering, replay and wrong keys are detected.
+- **Sliding-window streaming** (extension) — segments fetched as chunks through a receiver-side sliding window over several connections; long streams keep playing through connection resets.
 - **Evaluation** — parallel scenario runner, bandwidth traces, QoE/PSNR report with charts, a Wireshark dissector, and a three-client live demo.
 
 ## Quick Start
@@ -36,6 +37,7 @@ streamwise-experiment run experiments/default.toml   # full evaluation and repor
 - [Test report](docs/test-report.md): rebuffering and PSNR under different bandwidths
 - [Intelligent ABR](docs/intelligent-abr.md): Q-learning ABR, simulator, training and evaluation (extension E-01)
 - [Encryption](docs/encryption.md): AES-256-GCM handshake, record format, tests and cost (extension E-02)
+- [Sliding window](docs/sliding-window.md): chunked transport, selective repeat, window/RTT and fault evaluation (extension E-03)
 - [Requirement checklist](docs/requirements.md) ([中文](docs/requirements.zh.md))
 - [Assignment](docs/assignment.md) ([中文](docs/assignment.zh.md))
 

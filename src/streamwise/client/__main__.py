@@ -70,6 +70,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="pre-shared key file that authenticates the server (implies --encrypt)",
     )
+    parser.add_argument(
+        "--transport",
+        choices=["segment", "window"],
+        default="segment",
+        help="'segment': one request per segment; 'window': sliding window of chunk requests "
+        "over several connections, survives connection failures (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--window", type=int, default=16, help="chunks in flight or reassembly (default: 16)"
+    )
+    parser.add_argument("--chunk-kb", type=int, default=64, help="chunk size in KiB (default: 64)")
+    parser.add_argument(
+        "--connections", type=int, default=1, help="parallel connections (default: 1)"
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="only log warnings and errors")
     return parser
 
@@ -86,19 +100,27 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    config = ClientConfig(
-        host=args.host,
-        port=args.port,
-        video=args.video,
-        name=args.name,
-        max_buffer_s=args.max_buffer,
-        startup_buffer_s=args.startup_buffer,
-        max_segments=args.segments,
-        download_dir=args.download_dir,
-        log_db=None if args.no_log else args.log_db,
-        encrypt=args.encrypt or args.psk_file is not None,
-        psk_file=args.psk_file,
-    )
+    try:
+        config = ClientConfig(
+            host=args.host,
+            port=args.port,
+            video=args.video,
+            name=args.name,
+            max_buffer_s=args.max_buffer,
+            startup_buffer_s=args.startup_buffer,
+            max_segments=args.segments,
+            download_dir=args.download_dir,
+            log_db=None if args.no_log else args.log_db,
+            encrypt=args.encrypt or args.psk_file is not None,
+            psk_file=args.psk_file,
+            transport=args.transport,
+            window=args.window,
+            chunk_kb=args.chunk_kb,
+            connections=args.connections,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     player: Player
     if args.player == "ffplay":
         player = FfplayPlayer(
@@ -129,6 +151,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"avg bitrate {m.avg_bitrate_kbps:.0f} kbps, startup {m.startup_delay_s:.2f}s, "
                 f"stalls {m.stall_count} ({m.stall_time_s:.2f}s, ratio {m.rebuffer_ratio:.2%}), "
                 f"switches {m.switch_count}, QoE/seg {m.qoe_per_segment:.3f}"
+            )
+        t = result.transport
+        if t is not None:
+            print(
+                f"[{args.name}] window: {t.connection_failures} connection failures, "
+                f"{t.reconnects} reconnects, {t.retransmitted_chunks} chunks re-requested "
+                f"({t.retransmitted_bytes / 1e6:.2f} MB), peak reassembly "
+                f"{t.max_reassembly_chunks} chunks"
             )
         return 0 if result.status == "completed" else 1
 
