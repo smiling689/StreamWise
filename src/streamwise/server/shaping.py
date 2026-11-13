@@ -67,6 +67,87 @@ class BandwidthTrace:
     def load(cls, path: Path) -> BandwidthTrace:
         return cls.parse(path.read_text())
 
+    @classmethod
+    def from_samples(cls, samples: list[tuple[float, float]]) -> BandwidthTrace:
+        """Build a trace from measured ``(time_s, mbps)`` samples.
+
+        Measurement logs do not always satisfy the strict trace format, so samples are
+        normalized: times are shifted to start at 0, samples whose time does not increase are
+        dropped, negative rates are clamped to 0, and trailing zero-rate samples are removed.
+        """
+        if not samples:
+            raise ValueError("no samples")
+        t0 = samples[0][0]
+        times: list[float] = []
+        rates: list[float] = []
+        for t, mbps in samples:
+            t -= t0
+            if times and t <= times[-1]:
+                continue
+            times.append(t)
+            rates.append(max(0.0, mbps) * MBPS)
+        while len(rates) > 1 and rates[-1] <= 0:
+            times.pop()
+            rates.pop()
+        if rates[-1] <= 0:
+            raise ValueError("trace has no positive bandwidth")
+        return cls(tuple(times), tuple(rates))
+
+    @classmethod
+    def load_samples(cls, path: Path) -> BandwidthTrace:
+        """Load a measured trace (``<time_s> <mbps>`` per line), normalizing it."""
+        samples = []
+        for line in path.read_text().splitlines():
+            fields = [f for f in re.split(r"[,\s]+", line.split("#", 1)[0].strip()) if f]
+            if len(fields) >= 2:
+                samples.append((float(fields[0]), float(fields[1])))
+        return cls.from_samples(samples)
+
+    def to_text(self, header: str = "") -> str:
+        """Serialize in the trace file format (exact float round trip)."""
+        lines = [f"# {line}" for line in header.splitlines()]
+        lines += [f"{t!r} {r / MBPS!r}" for t, r in zip(self.times, self.rates_bps, strict=True)]
+        return "\n".join(lines) + "\n"
+
+    @property
+    def mean_bps(self) -> float:
+        """Time-weighted mean rate up to the last change (the last rate if constant)."""
+        if len(self.times) == 1:
+            return self.rates_bps[0]
+        return self.bytes_between(0, self.end_time) * 8 / self.end_time
+
+    def repeated(self, min_duration: float, period: float | None = None) -> BandwidthTrace:
+        """Loop the trace until it covers ``min_duration`` seconds.
+
+        One period lasts ``period`` seconds (default: until the last sample plus the median
+        sample spacing, so the last sample keeps its typical duration).
+        """
+        if len(self.times) == 1:
+            return self
+        if period is None:
+            gaps = sorted(b - a for a, b in zip(self.times, self.times[1:], strict=False))
+            period = self.end_time + gaps[len(gaps) // 2]
+        if period <= self.end_time:
+            raise ValueError("period must be longer than the last sample time")
+        times, rates = [], []
+        offset = 0.0
+        while offset < min_duration:
+            times += [offset + t for t in self.times]
+            rates += list(self.rates_bps)
+            offset += period
+        if rates[-1] <= 0:
+            times.append(offset)
+            rates.append(next(r for r in self.rates_bps if r > 0))
+        return BandwidthTrace(tuple(times), tuple(rates))
+
+    def shifted(self, offset: float) -> BandwidthTrace:
+        """The trace as seen from ``offset`` seconds in (time ``offset`` becomes time 0)."""
+        if offset <= 0:
+            return self
+        i = max(0, bisect.bisect_right(self.times, offset) - 1)
+        times = (0.0, *(t - offset for t in self.times[i + 1 :]))
+        return BandwidthTrace(times, self.rates_bps[i:])
+
     @property
     def end_time(self) -> float:
         """Time of the last change."""

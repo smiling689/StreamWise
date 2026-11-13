@@ -188,7 +188,16 @@ QoE only where bandwidth is plentiful. A 15 s reservoir is as safe as 10 s but s
 low quality longer: it has a lower PSNR in every scenario. The 10 s default has no stalls
 anywhere and the best QoE in all three constrained scenarios.
 
-## 5. Reproducibility and Limitations
+## 5. Q-Learning ABR (Extension E-01)
+
+The learned ABR is evaluated separately in [intelligent-abr.md](intelligent-abr.md): on 342
+held-out traces in a validated simulator, and in the real system on the six scenarios above
+plus three measured 3G traces. In the real system it has the best mean QoE (0.833 per segment,
+vs. 0.570 for throughput-based ABR and 0.300 for BBA). It also avoids the failure cases of both
+rule-based algorithms: 1 stall instead of 5 after the bandwidth drop, and 1 instead of 10 on
+the tram trace.
+
+## 6. Reproducibility and Limitations
 
 - **Reproducibility.** The BBA 10 s / 14 s configuration ran twice, in the main and in the
   sensitivity experiment, and gave identical metrics in all five shared scenarios (e.g.
@@ -203,7 +212,7 @@ anywhere and the best QoE in all three constrained scenarios.
 - **Single video.** Results hold for Big Buck Bunny's content complexity; other content
   shifts the bitrate–PSNR curve.
 
-## 6. Packet Capture (T-04)
+## 7. Packet Capture (T-04)
 
 `tools/wireshark/streamwise.lua` decodes the protocol. It was checked on a synthetic capture
 of a full session (HELLO, WELCOME, GET_MANIFEST, MANIFEST, GET_SEGMENT, a SEGMENT spanning
@@ -214,7 +223,7 @@ procedure is in the [user manual, §7](user-manual.md#7-packet-capture-with-wire
 > TODO (team): add screenshots of a live capture — the decoded message list and a TCP
 > throughput graph across a bandwidth drop.
 
-## 7. Reproducing the Results
+## 8. Reproducing the Results
 
 ```bash
 streamwise-experiment run experiments/default.toml --out results/default

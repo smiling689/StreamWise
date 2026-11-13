@@ -96,7 +96,7 @@ streamwise-client --name probe --player none --segments 6   # headless, first 6 
 | --- | --- | --- |
 | `--host`, `--port` | `127.0.0.1`, `9000` | Server address |
 | `--video` | `bbb` | Video name |
-| `--abr` | `buffer` | `throughput`, `buffer`, or `fixed:<level\|min\|max>`; parameters as in `throughput:window=5,safety=0.9` or `buffer:reservoir_s=5,cushion_s=15` |
+| `--abr` | `buffer` | `throughput`, `buffer`, `qlearning`, or `fixed:<level\|min\|max>`; parameters as in `throughput:window=5,safety=0.9` or `buffer:reservoir_s=5,cushion_s=15` |
 | `--max-buffer` | 30 | Buffer cap (s) |
 | `--startup-buffer` | 5 | Media buffered before playback starts (s) |
 | `--segments` | all | Only stream the first N segments |
@@ -137,6 +137,22 @@ An experiment runs one server per network scenario and one headless client proce
 ABR, all in parallel. The output directory contains `summary.md` / `summary.csv`,
 `figures/metrics.png`, `figures/timeline-<scenario>.png`, the SQLite logs, and the logs of
 every process. To define new scenarios and algorithms, copy `experiments/default.toml`.
+
+### Q-learning ABR (extension E-01)
+
+The trained model `models/qlearning-bbb.json` is part of the repository; use it with
+`--abr qlearning`. To retrain or re-evaluate it, first download the measured 3G traces:
+
+```bash
+scripts/fetch_hsdpa_traces.sh                     # -> traces/hsdpa (git-ignored)
+streamwise-sim train --seed 1 --out models/qlearning-bbb.json
+streamwise-sim evaluate --abr throughput --abr buffer --abr qlearning --reference qlearning
+streamwise-sim validate results/default           # simulator vs. a real experiment
+streamwise-experiment run experiments/qlearning.toml
+```
+
+The model is tied to the bitrate ladder it was trained on; with other media, retrain it. See
+[intelligent-abr.md](intelligent-abr.md) for the method and the results.
 
 ## 7. Packet Capture with Wireshark
 

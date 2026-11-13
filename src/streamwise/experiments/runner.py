@@ -20,24 +20,50 @@ import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from streamwise.server.shaping import BandwidthTrace
+
 
 @dataclass(frozen=True, slots=True)
 class Scenario:
     name: str
     rate_mbps: float | None = None
     trace: str | None = None
+    measured_trace: str | None = None
+    """A measured trace (e.g. HSDPA): normalized and looped into the output directory first."""
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_]+", self.name):
-            raise ValueError(f"scenario name {self.name!r}: use letters, digits, underscores")
-        if (self.rate_mbps is None) == (self.trace is None):
-            raise ValueError(f"scenario {self.name!r}: set exactly one of rate_mbps and trace")
+            raise ValueError(f"scenario {self.name!r}: use letters, digits, underscores")
+        if sum(x is not None for x in (self.rate_mbps, self.trace, self.measured_trace)) != 1:
+            raise ValueError(
+                f"scenario {self.name!r}: set exactly one of rate_mbps, trace, measured_trace"
+            )
 
-    def server_args(self, base_dir: Path) -> list[str]:
+    def server_args(self, base_dir: Path, out_dir: Path) -> list[str]:
         if self.rate_mbps is not None:
             return ["--rate-mbps", str(self.rate_mbps)]
-        assert self.trace is not None
-        return ["--trace", str((base_dir / self.trace).resolve())]
+        return ["--trace", str(scenario_trace_path(asdict(self), base_dir, out_dir))]
+
+
+def scenario_trace_path(scenario: dict, base_dir: Path, out_dir: Path) -> Path | None:
+    """Trace file a scenario replays (``None`` for a constant rate)."""
+    if scenario.get("trace"):
+        return (base_dir / scenario["trace"]).resolve()
+    if scenario.get("measured_trace"):
+        return (out_dir / "traces" / f"{scenario['name']}.txt").resolve()
+    return None
+
+
+def prepare_measured_trace(scenario: Scenario, base_dir: Path, out_dir: Path) -> None:
+    from streamwise.sim.tracesets import MIN_TRACE_S
+
+    assert scenario.measured_trace is not None
+    source = base_dir / scenario.measured_trace
+    trace = BandwidthTrace.load_samples(source).repeated(MIN_TRACE_S)
+    target = scenario_trace_path(asdict(scenario), base_dir, out_dir)
+    assert target is not None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(trace.to_text(f"Normalized and looped from {scenario.measured_trace}"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +139,10 @@ async def run_experiment(config: ExperimentConfig, config_path: Path, out_dir: P
     media_dir = (base_dir / config.media_dir).resolve()
     python = sys.executable
 
+    for scenario in config.scenarios:
+        if scenario.measured_trace is not None:
+            prepare_measured_trace(scenario, base_dir, out_dir)
+
     servers: list[asyncio.subprocess.Process] = []
     server_logs = []
     try:
@@ -137,7 +167,7 @@ async def run_experiment(config: ExperimentConfig, config_path: Path, out_dir: P
                     str(out_dir / f"server-{scenario.name}.db"),
                     "--shaping-scope",
                     "connection",
-                    *scenario.server_args(base_dir),
+                    *scenario.server_args(base_dir, out_dir),
                     stdout=log_file,
                     stderr=asyncio.subprocess.STDOUT,
                 )  # fmt: skip

@@ -8,13 +8,14 @@ version = "0.1.0"
 description = "TCP-based segmented video streaming with adaptive bitrate"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["numpy"]
 
 [project.scripts]
 streamwise-server = "streamwise.server.__main__:main"
 streamwise-client = "streamwise.client.__main__:main"
 streamwise-media = "streamwise.media.__main__:main"
 streamwise-experiment = "streamwise.experiments.__main__:main"
+streamwise-sim = "streamwise.sim.__main__:main"
 
 [project.optional-dependencies]
 analysis = ["numpy", "pandas", "matplotlib"]
