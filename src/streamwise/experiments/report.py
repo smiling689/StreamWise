@@ -182,6 +182,29 @@ def plot_metrics(summary: pd.DataFrame, scenarios: list[str], abrs: list[str], p
                 ax.set_ylim(values.min() - 1.5, values.max() + 1.5)
         elif metric == "qoe_per_segment":
             ax.axhline(0, color=INK_2, linewidth=0.8)
+            # Heavily stalling baselines can be an order of magnitude below the rest; clip
+            # the axis so the adaptive algorithms stay readable and print clipped values.
+            top = max(1.0, float(values.max()) * 1.15) if not values.empty else 1.0
+            floor = -2 * top
+            if not values.empty and values.min() < floor:
+                ax.set_ylim(floor, top)
+                for i, abr in enumerate(abrs):
+                    rows = summary[summary["abr"] == abr].set_index("scenario").reindex(scenarios)
+                    for x, v in enumerate(rows[metric]):
+                        if v < floor:
+                            xpos = x + (i - (len(abrs) - 1) / 2) * width
+                            ax.annotate(
+                                f"{v:.1f}",
+                                (xpos, floor),
+                                xytext=(0, 4),
+                                textcoords="offset points",
+                                ha="center",
+                                va="bottom",
+                                fontsize=7,
+                                color=INK,
+                                bbox={"boxstyle": "round,pad=0.2", "fc": SURFACE, "ec": GRID},
+                            )
+                ax.set_title(f"{label} (axis clipped; value printed)", loc="left")
         else:  # non-negative quantities
             ax.set_ylim(0, max(1.0, float(values.max()) * 1.1) if not values.empty else 1.0)
     handles, labels = axes.flat[0].get_legend_handles_labels()
@@ -245,12 +268,13 @@ def plot_timeline(
     top.set_title(f"{scenario}: requested bitrate vs. link bandwidth", loc="left")
     top.set_ylabel("Mbit/s")
     top.set_ylim(0, max(ys) * 1.1)
-    top.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=len(abrs) + 1)
+    handles, labels = top.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 1.0))
     bottom.set_title("Buffer level after each download", loc="left")
     bottom.set_ylabel("seconds")
     bottom.set_xlabel("session time (s)")
     bottom.set_ylim(bottom=0)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(path)
     plt.close(fig)
 
