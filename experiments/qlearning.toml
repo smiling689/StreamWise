@@ -1,0 +1,45 @@
+# Q-learning ABR vs. the rule-based algorithms in the real system.
+# Scenarios: the six standard ones plus three held-out HSDPA 3G test traces at the 25th, 50th
+# and 75th percentile of mean bandwidth (0.88 / 1.15 / 1.62 Mbit/s).
+# Needs: scripts/fetch_hsdpa_traces.sh and models/qlearning-bbb.json.
+video = "bbb"
+abrs = ["throughput", "buffer", "qlearning"]   # qlearning loads models/qlearning-bbb.json
+max_buffer_s = 30.0
+startup_buffer_s = 5.0
+base_port = 9500
+
+[[scenario]]
+name = "const_1mbps"
+rate_mbps = 1.0
+
+[[scenario]]
+name = "const_2mbps"
+rate_mbps = 2.0
+
+[[scenario]]
+name = "const_4mbps"
+rate_mbps = 4.0
+
+[[scenario]]
+name = "const_8mbps"
+rate_mbps = 8.0
+
+[[scenario]]
+name = "drop"
+trace = "traces/drop.txt"
+
+[[scenario]]
+name = "fluctuating"
+trace = "traces/fluctuating.txt"
+
+[[scenario]]
+name = "hsdpa_tram_3"
+measured_trace = "traces/hsdpa/test/norway_tram_3"
+
+[[scenario]]
+name = "hsdpa_metro_3"
+measured_trace = "traces/hsdpa/test/norway_metro_3"
+
+[[scenario]]
+name = "hsdpa_bus_13"
+measured_trace = "traces/hsdpa/test/norway_bus_13"
