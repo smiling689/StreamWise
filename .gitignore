@@ -14,7 +14,7 @@ htmlcov/
 venv/
 
 # Media: source videos and generated segments are large and reproducible
-media/
+/media/
 *.mp4
 *.mkv
 *.mov
@@ -22,8 +22,8 @@ media/
 *.m3u8
 
 # Runtime artifacts
-download/
-logs/
+/download/
+/logs/
 *.db
 *.sqlite
 *.sqlite3
@@ -31,7 +31,7 @@ logs/
 *.pcapng
 
 # Experiment outputs (regenerate from scripts)
-results/
+/results/
 
 # Editors / OS
 .vscode/
