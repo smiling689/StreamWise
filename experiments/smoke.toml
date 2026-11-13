@@ -1,0 +1,15 @@
+# Quick check of the experiment pipeline (about 40 s): first 6 segments only.
+video = "bbb"
+abrs = ["throughput", "buffer", "fixed:2"]
+segments = 6
+max_buffer_s = 30.0
+startup_buffer_s = 5.0
+base_port = 9300
+
+[[scenario]]
+name = "const_3mbps"
+rate_mbps = 3.0
+
+[[scenario]]
+name = "drop"
+trace = "traces/drop.txt"

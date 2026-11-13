@@ -1,0 +1,4 @@
+# Drop and recovery: 8 Mbit/s, 1 Mbit/s from 60 s to 120 s, then 8 Mbit/s again.
+0 8
+60 1
+120 8

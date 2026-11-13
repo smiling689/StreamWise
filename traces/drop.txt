@@ -1,0 +1,4 @@
+# Sudden bandwidth drop: 8 Mbit/s, falling to 1 Mbit/s at t = 60 s.
+# Format: <time_s> <bandwidth_mbps>; each rate holds until the next line.
+0 8
+60 1

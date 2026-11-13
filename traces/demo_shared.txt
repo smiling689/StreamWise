@@ -1,0 +1,5 @@
+# Live demo with --shaping-scope global (one link shared by all clients):
+# 30 Mbit/s, sudden drop to 4 Mbit/s at 50 s, recovery to 30 Mbit/s at 110 s.
+0 30
+50 4
+110 30

@@ -14,6 +14,7 @@ dependencies = []
 streamwise-server = "streamwise.server.__main__:main"
 streamwise-client = "streamwise.client.__main__:main"
 streamwise-media = "streamwise.media.__main__:main"
+streamwise-experiment = "streamwise.experiments.__main__:main"
 
 [project.optional-dependencies]
 analysis = ["numpy", "pandas", "matplotlib"]

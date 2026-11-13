@@ -70,7 +70,7 @@ class FfplayPlayer:
         if exe is None:
             raise FileNotFoundError(f"{self.executable} not found on PATH")
         args = [
-            exe, "-hide_banner", "-loglevel", "error", "-autoexit",
+            exe, "-hide_banner", "-loglevel", "error", "-nostats", "-autoexit",
             "-window_title", self.title,
             # Segment 0 alone is enough to probe the stream, so playback can start right away.
             "-probesize", "262144", "-analyzeduration", "1000000",
