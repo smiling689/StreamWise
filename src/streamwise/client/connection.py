@@ -65,6 +65,10 @@ class StreamClient:
         self.server_name: str | None = None
         self.videos: list[str] = []
         self.channel: crypto.SecureChannel | None = None
+        # Pipelined requests read their responses in send order: each waits for the future
+        # of the request before it. ``_broken`` poisons the connection after a failed read.
+        self._read_turn: asyncio.Future[None] | None = None
+        self._broken: BaseException | None = None
         self.encryption = "none"
         """Negotiated protection: ``none``, ``AES-256-GCM`` or ``AES-256-GCM+PSK``."""
 
@@ -141,6 +145,53 @@ class StreamClient:
             header.type, header.request_id, request_id, payload, MessageType.SEGMENT
         )
         return FetchResult(filename, payload, request_time, first_byte_time, done_time)
+
+    @property
+    def broken(self) -> bool:
+        """True after a pipelined read failed; the connection must be replaced."""
+        return self._broken is not None
+
+    async def get_chunk(self, filename: str, offset: int, length: int) -> bytes:
+        """Request a byte range of a segment. Safe to call concurrently (pipelining).
+
+        Requests are written immediately; responses are read in the same order, so up to as
+        many requests as there are concurrent callers are in flight on this connection. Any
+        failure while reading poisons the connection: all later calls fail fast.
+        """
+        if self._broken is not None:
+            raise ConnectionError(f"connection unusable: {self._broken}")
+        loop = asyncio.get_running_loop()
+        previous = self._read_turn
+        mine: asyncio.Future[None] = loop.create_future()
+        self._read_turn = mine
+        request_id = self._take_id()
+        try:
+            await self._write(
+                Message(
+                    MessageType.GET_CHUNK,
+                    request_id,
+                    proto.chunk_request(filename, offset, length),
+                )
+            )
+            if previous is not None:
+                await asyncio.shield(previous)
+            if self._broken is not None:
+                raise ConnectionError(f"connection unusable: {self._broken}")
+            header = await self._read_header()
+            payload = await self._open(header, await self._read_payload(header))
+        except BaseException as exc:
+            # A request whose response was not consumed (failure or cancellation) leaves the
+            # response stream out of step, so nothing more can be read from this connection.
+            if self._broken is None:
+                self._broken = exc
+            raise
+        finally:
+            if not mine.done():
+                mine.set_result(None)
+        self._check_response(header.type, header.request_id, request_id, payload, MessageType.CHUNK)
+        if len(payload) != length:
+            raise ProtocolError(f"asked for {length} bytes, got {len(payload)}")
+        return payload
 
     async def close(self, *, send_bye: bool = True) -> None:
         if send_bye and not self._writer.is_closing():

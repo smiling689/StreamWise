@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from streamwise.analysis.metrics import SessionMetrics
 from streamwise.client.playback import Stall
 from streamwise.common.sqlitelog import SqliteWriter
+
+if TYPE_CHECKING:
+    from streamwise.client.window import WindowStats
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -34,7 +37,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     switch_count      INTEGER,
     avg_switch_kbps   REAL,
     qoe               REAL,
-    qoe_per_segment   REAL
+    qoe_per_segment   REAL,
+    connection_failures  INTEGER,    -- sliding-window transport only
+    reconnects           INTEGER,
+    retransmitted_chunks INTEGER,
+    retransmitted_bytes  INTEGER
 );
 CREATE TABLE IF NOT EXISTS segments (
     session_id      TEXT NOT NULL REFERENCES sessions(session_id),
@@ -87,7 +94,18 @@ class SegmentRecord:
 
 class ClientLog:
     def __init__(self, path: Path) -> None:
-        self._db = SqliteWriter(path, SCHEMA)
+        self._db = SqliteWriter(
+            path,
+            SCHEMA,
+            {
+                "sessions": [
+                    ("connection_failures", "INTEGER"),
+                    ("reconnects", "INTEGER"),
+                    ("retransmitted_chunks", "INTEGER"),
+                    ("retransmitted_bytes", "INTEGER"),
+                ]
+            },
+        )
 
     def session_started(
         self,
@@ -146,10 +164,18 @@ class ClientLog:
         status: str,
         error: str | None,
         metrics: SessionMetrics | None,
+        transport: WindowStats | None = None,
     ) -> None:
         values: dict[str, Any] = {"ended_at": ended_at, "status": status, "error": error}
         if metrics is not None:
             values.update(metrics.to_dict())
+        if transport is not None:
+            values.update(
+                connection_failures=transport.connection_failures,
+                reconnects=transport.reconnects,
+                retransmitted_chunks=transport.retransmitted_chunks,
+                retransmitted_bytes=transport.retransmitted_bytes,
+            )
         columns = ", ".join(f"{k} = ?" for k in values)
         self._db.execute(
             f"UPDATE sessions SET {columns} WHERE session_id = ?",
