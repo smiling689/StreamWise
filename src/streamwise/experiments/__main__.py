@@ -1,4 +1,4 @@
-"""Command-line interface: ``streamwise-experiment run|report|gen-trace|crypto-bench``."""
+"""Command-line interface: ``streamwise-experiment <command>`` (see ``--help``)."""
 
 from __future__ import annotations
 
@@ -34,6 +34,23 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--media-dir", type=Path, default=Path("media"))
     bench.add_argument("--video", default="bbb")
     bench.add_argument("--out", type=Path, help="also write the result to this Markdown file")
+    win = sub.add_parser("window-bench", help="evaluate the sliding-window transport")
+    win.add_argument("--media-dir", type=Path, default=Path("media"))
+    win.add_argument("--out", type=Path, default=Path("results/window-bench"))
+    win.add_argument("--rtt-video", default="bbb", help="video for the window/RTT sweep")
+    win.add_argument("--long-video", default="bbblong", help="video for the fault experiment")
+    win.add_argument("--rate-mbps", type=float, default=20.0, help="link rate of the RTT sweep")
+    win.add_argument(
+        "--fault-rate-mbps", type=float, default=4.0, help="link rate of the fault experiment"
+    )
+    win.add_argument(
+        "--reset-after-s",
+        type=float,
+        action="append",
+        help="connection lifetime(s) to test, repeatable (default: 30 and 10, plus no resets)",
+    )
+    win.add_argument("--skip-rtt", action="store_true")
+    win.add_argument("--skip-faults", action="store_true")
     return parser
 
 
@@ -58,6 +75,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(text)
+        return 0
+
+    if args.command == "window-bench":
+        from streamwise.experiments.windowbench import run as run_window_bench
+
+        resets = (None, *(args.reset_after_s or (30.0, 10.0)))
+        summary = run_window_bench(
+            args.media_dir,
+            args.out,
+            args.rtt_video,
+            args.long_video,
+            args.rate_mbps,
+            args.fault_rate_mbps,
+            resets,
+            args.skip_rtt,
+            args.skip_faults,
+        )
+        print(summary.read_text(), end="")
         return 0
 
     from streamwise.experiments.report import build_report  # matplotlib is slow to import
