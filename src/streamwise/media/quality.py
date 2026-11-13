@@ -69,7 +69,10 @@ class QualityTable:
                 {
                     "index": lv.index,
                     "label": lv.label,
-                    "psnr": mse_to_psnr(sum(lv.segment_mse) / len(lv.segment_mse)),
+                    # Two common aggregates: PSNR of the mean MSE (dominated by the worst
+                    # segments) and the mean of per-segment PSNRs (used for session PSNR).
+                    "psnr_of_mean_mse": mse_to_psnr(sum(lv.segment_mse) / len(lv.segment_mse)),
+                    "mean_segment_psnr": sum(lv.segment_psnr) / len(lv.segment_psnr),
                     "segment_mse": list(lv.segment_mse),
                     "segment_psnr": [round(p, 4) for p in lv.segment_psnr],
                 }

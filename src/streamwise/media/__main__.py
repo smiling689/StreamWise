@@ -48,7 +48,7 @@ def _report_quality(video_dir: Path, jobs: int) -> None:
     print(f"PSNR written to {video_dir / QUALITY_FILE} ({time.monotonic() - started:.0f}s)")
     for level in table.levels:
         psnr = level.segment_psnr
-        print(f"  {level.label:>14}: mean {sum(psnr) / len(psnr):6.2f} dB")
+        print(f"  {level.label:>14}: mean segment PSNR {sum(psnr) / len(psnr):6.2f} dB")
 
 
 def main(argv: list[str] | None = None) -> int:
